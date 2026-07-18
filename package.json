@@ -11,6 +11,7 @@
   "dependencies": {
     "lightweight-charts": "^4.2.3",
     "next": "16.2.10",
+    "next-auth": "^5.0.0-beta.31",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "yahoo-finance2": "^4.0.0"

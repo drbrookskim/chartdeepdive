@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useSession, signIn, signOut } from "next-auth/react";
 import ThemeToggle from "@/components/ThemeToggle";
 import SearchBox from "@/components/SearchBox";
 import type { SearchResult, Market } from "@/lib/api";
@@ -9,6 +10,7 @@ import { getRecent, pushRecent } from "@/lib/recent";
 
 export default function SearchPage() {
   const router = useRouter();
+  const { data: session, status } = useSession();
   const [markets, setMarkets] = useState<{ KR: boolean; US: boolean }>({
     KR: true,
     US: true,
@@ -60,6 +62,11 @@ export default function SearchPage() {
               US
             </button>
           </div>
+          {session && (
+            <button className="signoutbtn" onClick={() => signOut()}>
+              {session.user?.name} 로그아웃
+            </button>
+          )}
           <ThemeToggle />
         </div>
       </header>
@@ -67,25 +74,33 @@ export default function SearchPage() {
       <main className="searchhero">
         <h1>Dive into the Chart</h1>
 
-        <SearchBox onSelect={select} markets={markets} autoFocus />
+        {status === "loading" ? null : session ? (
+          <>
+            <SearchBox onSelect={select} markets={markets} autoFocus />
 
-        {recent.length > 0 && (
-          <div className="recent">
-            <div className="recent__label">최근 검색</div>
-            <div className="recent__chips">
-              {recent.map((r) => (
-                <button
-                  key={r.symbol}
-                  className="chip"
-                  data-initial={r.name.slice(0, 1)}
-                  onClick={() => select(r)}
-                >
-                  <strong>{r.name}</strong>
-                  <small>{r.symbol}</small>
-                </button>
-              ))}
-            </div>
-          </div>
+            {recent.length > 0 && (
+              <div className="recent">
+                <div className="recent__label">최근 검색</div>
+                <div className="recent__chips">
+                  {recent.map((r) => (
+                    <button
+                      key={r.symbol}
+                      className="chip"
+                      data-initial={r.name.slice(0, 1)}
+                      onClick={() => select(r)}
+                    >
+                      <strong>{r.name}</strong>
+                      <small>{r.symbol}</small>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <button className="googlesignin" onClick={() => signIn("google")}>
+            Google로 로그인
+          </button>
         )}
       </main>
     </>

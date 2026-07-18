@@ -191,7 +191,7 @@ button {
   align-items: center;
   justify-content: flex-start;
   padding: 32px;
-  padding-top: calc((100vh - 57px) * 0.62);
+  padding-top: calc((100vh - 57px) * 0.33);
   text-align: center;
   min-height: calc(100vh - 57px);
   background: var(--bg);
@@ -210,6 +210,31 @@ button {
   width: 100%;
   max-width: 580px;
   margin: 0 auto;
+}
+.googlesignin {
+  font-family: var(--sans);
+  font-size: 15px;
+  font-weight: 600;
+  padding: 12px 24px;
+  border-radius: var(--radius-btn);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+.googlesignin:hover {
+  background: var(--accent-soft);
+}
+.signoutbtn {
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 6px 12px;
+  border-radius: var(--radius-btn);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
 }
 .searchbox__field {
   display: flex;
