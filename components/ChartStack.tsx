@@ -299,6 +299,13 @@ export default function ChartStack({
   const trendsRef = useRef<
     { id: number; p1: { time: Time; price: number }; p2: { time: Time; price: number } }[]
   >([]);
+  // Drag-to-edit state for existing horizontal/trend lines when not in a
+  // draw mode — set on mousedown after hit-testing, cleared on mouseup.
+  const dragRef = useRef<
+    | { type: "horizontal"; id: number }
+    | { type: "trend"; id: number; end: "p1" | "p2" }
+    | null
+  >(null);
   const trendPendingRef = useRef<{ time: Time; price: number } | null>(null);
   const priceLineHandlesRef = useRef<Map<number, IPriceLine>>(new Map());
   // Persisted outside the big rebuild effect so drawPatternShapes/repositionArrows
@@ -1277,6 +1284,81 @@ export default function ChartStack({
     };
     main.subscribeClick(onChartClick);
 
+    // ---- drawing tool: drag-to-edit existing horizontal/trend lines when
+    // not actively placing a new one. Hit-tests against the same coordinates
+    // drawUserLines()/reapplyHorizontals() already compute; horizontal drags
+    // move the native IPriceLine directly (applyOptions, no recreation),
+    // trend endpoint drags rewrite that point and redraw the SVG line.
+    const HIT_TOLERANCE = 8;
+    const localXY = (e: MouseEvent) => {
+      const rect = mainRef.current!.getBoundingClientRect();
+      return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    };
+    const hitTestLines = (x: number, y: number): typeof dragRef.current => {
+      const series = candleSeriesRef.current;
+      if (!series) return null;
+      for (const t of trendsRef.current) {
+        const x1 = main.timeScale().timeToCoordinate(t.p1.time);
+        const y1 = series.priceToCoordinate(t.p1.price);
+        if (x1 != null && y1 != null && Math.hypot(x - x1, y - y1) < HIT_TOLERANCE) {
+          return { type: "trend", id: t.id, end: "p1" };
+        }
+        const x2 = main.timeScale().timeToCoordinate(t.p2.time);
+        const y2 = series.priceToCoordinate(t.p2.price);
+        if (x2 != null && y2 != null && Math.hypot(x - x2, y - y2) < HIT_TOLERANCE) {
+          return { type: "trend", id: t.id, end: "p2" };
+        }
+      }
+      for (const h of horizontalsRef.current) {
+        const hy = series.priceToCoordinate(h.price);
+        if (hy != null && Math.abs(y - hy) < HIT_TOLERANCE) return { type: "horizontal", id: h.id };
+      }
+      return null;
+    };
+    const onDrawMouseDown = (e: MouseEvent) => {
+      if (drawModeRef.current) return; // placing a new line takes priority
+      const { x, y } = localXY(e);
+      const hit = hitTestLines(x, y);
+      if (!hit) return;
+      dragRef.current = hit;
+      e.preventDefault();
+    };
+    const onDrawMouseMove = (e: MouseEvent) => {
+      const series = candleSeriesRef.current;
+      const drag = dragRef.current;
+      const { x, y } = localXY(e);
+      if (!drag) {
+        if (!drawModeRef.current && mainRef.current) {
+          const hit = hitTestLines(x, y);
+          mainRef.current.style.cursor = hit ? (hit.type === "horizontal" ? "ns-resize" : "move") : "";
+        }
+        return;
+      }
+      if (!series) return;
+      if (drag.type === "horizontal") {
+        const price = series.coordinateToPrice(y);
+        if (price == null) return;
+        const h = horizontalsRef.current.find((h) => h.id === drag.id);
+        if (!h) return;
+        h.price = price;
+        priceLineHandlesRef.current.get(drag.id)?.applyOptions({ price });
+      } else {
+        const time = main.timeScale().coordinateToTime(x);
+        const price = series.coordinateToPrice(y);
+        if (time == null || price == null) return;
+        const t = trendsRef.current.find((t) => t.id === drag.id);
+        if (!t) return;
+        t[drag.end] = { time, price };
+        drawUserLines();
+      }
+    };
+    const onDrawMouseUp = () => {
+      dragRef.current = null;
+    };
+    mainRef.current.addEventListener("mousedown", onDrawMouseDown);
+    window.addEventListener("mousemove", onDrawMouseMove);
+    window.addEventListener("mouseup", onDrawMouseUp);
+
     // ---- responsive resize: all panes share the chart column width ----
     // The chart can be created before the grid finishes laying out (width ~0);
     // when the real width first arrives we must refit so bars aren't
@@ -1304,6 +1386,10 @@ export default function ChartStack({
       main.unsubscribeCrosshairMove(crosshairHandler);
       main.timeScale().unsubscribeVisibleTimeRangeChange(rangeHandler);
       main.unsubscribeClick(onChartClick);
+      mainRef.current?.removeEventListener("mousedown", onDrawMouseDown);
+      window.removeEventListener("mousemove", onDrawMouseMove);
+      window.removeEventListener("mouseup", onDrawMouseUp);
+      dragRef.current = null;
       if (zoomTimerRef.current) clearTimeout(zoomTimerRef.current);
       mainApiRef.current = null;
       volumeApiRef.current = null;
