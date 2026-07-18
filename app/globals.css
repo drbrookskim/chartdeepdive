@@ -189,8 +189,9 @@ button {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   padding: 32px;
+  padding-top: calc((100vh - 57px) * 0.62);
   text-align: center;
   min-height: calc(100vh - 57px);
   background: var(--bg);
