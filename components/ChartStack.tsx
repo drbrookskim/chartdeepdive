@@ -304,11 +304,23 @@ export default function ChartStack({
   const dragRef = useRef<
     | { type: "horizontal"; id: number }
     | { type: "trend"; id: number; end: "p1" | "p2" }
+    // Grabbing the line body (not an endpoint) translates both points
+    // together — origP1/origP2/origMouse are the pixel-space snapshot taken
+    // at drag start so every move computes a fresh delta from the same base.
+    | {
+        type: "trend";
+        id: number;
+        end: "body";
+        origP1: { time: Time; price: number };
+        origP2: { time: Time; price: number };
+        origMouseX: number;
+        origMouseY: number;
+      }
     | null
   >(null);
   // A line becomes draggable only after a long-press "unlocks" it (shown
-  // dashed); clicking that same dashed line again (without dragging)
-  // re-locks it (back to solid) instead of toggling on every plain click.
+  // dashed); clicking that same dashed line again (without dragging), or
+  // clicking anywhere else, re-locks it (back to solid).
   const editingLineRef = useRef<{ type: "horizontal" | "trend"; id: number } | null>(null);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mouseDownPosRef = useRef<{ x: number; y: number } | null>(null);
@@ -509,7 +521,7 @@ export default function ChartStack({
       line.setAttribute("stroke-dasharray", editing ? "6 4" : "none");
       label.setAttribute("x", `${(x1 + x2) / 2}`);
       label.setAttribute("y", `${(y1 + y2) / 2 - 8}`);
-      label.textContent = `${i + 1}`;
+      label.textContent = `추세선 ${i + 1}`;
     });
   }, []);
 
@@ -1315,6 +1327,13 @@ export default function ChartStack({
       const rect = mainRef.current!.getBoundingClientRect();
       return { x: e.clientX - rect.left, y: e.clientY - rect.top };
     };
+    const distToSegment = (px: number, py: number, x1: number, y1: number, x2: number, y2: number) => {
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const lenSq = dx * dx + dy * dy;
+      const t = lenSq === 0 ? 0 : Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / lenSq));
+      return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
+    };
     const hitTestLines = (x: number, y: number): typeof dragRef.current => {
       const series = candleSeriesRef.current;
       if (!series) return null;
@@ -1329,6 +1348,21 @@ export default function ChartStack({
         if (x2 != null && y2 != null && Math.hypot(x - x2, y - y2) < HIT_TOLERANCE) {
           return { type: "trend", id: t.id, end: "p2" };
         }
+        // Not on either endpoint — check the segment body so long-pressing
+        // anywhere along the line (not just its ends) unlocks it too.
+        if (x1 != null && y1 != null && x2 != null && y2 != null) {
+          if (distToSegment(x, y, x1, y1, x2, y2) < HIT_TOLERANCE) {
+            return {
+              type: "trend",
+              id: t.id,
+              end: "body",
+              origP1: t.p1,
+              origP2: t.p2,
+              origMouseX: x,
+              origMouseY: y,
+            };
+          }
+        }
       }
       for (const h of horizontalsRef.current) {
         const hy = series.priceToCoordinate(h.price);
@@ -1340,14 +1374,24 @@ export default function ChartStack({
     const MOVE_CANCEL_PX = 4;
     const isEditingHit = (hit: NonNullable<typeof dragRef.current>) =>
       editingLineRef.current?.type === hit.type && editingLineRef.current.id === hit.id;
-    const restyleHit = (hit: NonNullable<typeof dragRef.current>) => {
+    const restyleHit = (hit: { type: "horizontal" | "trend"; id: number }) => {
       if (hit.type === "horizontal") reapplyHorizontals();
       else drawUserLines();
+    };
+    // Locks (re-solidifies) whatever line is currently unlocked, if any —
+    // called both when a click lands elsewhere on the chart and, via the
+    // document-level listener below, when it lands outside the chart entirely.
+    const finishEditing = () => {
+      const target = editingLineRef.current;
+      if (!target) return;
+      editingLineRef.current = null;
+      restyleHit(target);
     };
     const onDrawMouseDown = (e: MouseEvent) => {
       if (drawModeRef.current) return; // placing a new line takes priority
       const { x, y } = localXY(e);
       const hit = hitTestLines(x, y);
+      if (!hit || !isEditingHit(hit)) finishEditing();
       if (!hit) return;
       e.preventDefault();
       mouseDownPosRef.current = { x, y };
@@ -1403,6 +1447,39 @@ export default function ChartStack({
         if (!h) return;
         h.price = price;
         priceLineHandlesRef.current.get(drag.id)?.applyOptions({ price });
+      } else if (drag.end === "body") {
+        // Translate both endpoints by the same pixel delta so the segment
+        // keeps its shape instead of pivoting around one point. Clamped to
+        // the actual plotted bar range — coordinateToTime returns null past
+        // the first/last bar (e.g. dragging right with rightOffset 0, where
+        // the latest bar already sits flush against the axis), which would
+        // otherwise silently no-op the whole translation.
+        const t = trendsRef.current.find((t) => t.id === drag.id);
+        if (!t) return;
+        let dxPx = x - drag.origMouseX;
+        const dyPx = y - drag.origMouseY;
+        const x1 = main.timeScale().timeToCoordinate(drag.origP1.time);
+        const y1 = series.priceToCoordinate(drag.origP1.price);
+        const x2 = main.timeScale().timeToCoordinate(drag.origP2.time);
+        const y2 = series.priceToCoordinate(drag.origP2.price);
+        if (x1 == null || y1 == null || x2 == null || y2 == null) return;
+        const firstBarX = main.timeScale().timeToCoordinate(toChartTime(effectiveCandles[0].date, isIntraday));
+        const lastBarX = main.timeScale().timeToCoordinate(
+          toChartTime(effectiveCandles[effectiveCandles.length - 1].date, isIntraday),
+        );
+        if (firstBarX != null && lastBarX != null) {
+          const loX = Math.min(x1, x2);
+          const hiX = Math.max(x1, x2);
+          dxPx = Math.max(firstBarX - loX, Math.min(lastBarX - hiX, dxPx));
+        }
+        const time1 = main.timeScale().coordinateToTime(x1 + dxPx);
+        const price1 = series.coordinateToPrice(y1 + dyPx);
+        const time2 = main.timeScale().coordinateToTime(x2 + dxPx);
+        const price2 = series.coordinateToPrice(y2 + dyPx);
+        if (time1 == null || price1 == null || time2 == null || price2 == null) return;
+        t.p1 = { time: time1, price: price1 };
+        t.p2 = { time: time2, price: price2 };
+        drawUserLines();
       } else {
         const time = main.timeScale().coordinateToTime(x);
         const price = series.coordinateToPrice(y);
@@ -1433,6 +1510,13 @@ export default function ChartStack({
     mainRef.current.addEventListener("mousedown", onDrawMouseDown);
     window.addEventListener("mousemove", onDrawMouseMove);
     window.addEventListener("mouseup", onDrawMouseUp);
+    // Clicking anywhere outside the chart entirely (sidebar, header, ...)
+    // also finishes editing — onDrawMouseDown only covers clicks inside the
+    // chart itself. Capture phase so it fires before the click's own handler.
+    const onDocumentMouseDown = (e: MouseEvent) => {
+      if (editingLineRef.current && !mainRef.current?.contains(e.target as Node)) finishEditing();
+    };
+    document.addEventListener("mousedown", onDocumentMouseDown, true);
 
     // ---- responsive resize: all panes share the chart column width ----
     // The chart can be created before the grid finishes laying out (width ~0);
@@ -1464,6 +1548,7 @@ export default function ChartStack({
       mainRef.current?.removeEventListener("mousedown", onDrawMouseDown);
       window.removeEventListener("mousemove", onDrawMouseMove);
       window.removeEventListener("mouseup", onDrawMouseUp);
+      document.removeEventListener("mousedown", onDocumentMouseDown, true);
       dragRef.current = null;
       if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
       if (zoomTimerRef.current) clearTimeout(zoomTimerRef.current);
