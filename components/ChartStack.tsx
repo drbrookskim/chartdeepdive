@@ -306,6 +306,14 @@ export default function ChartStack({
     | { type: "trend"; id: number; end: "p1" | "p2" }
     | null
   >(null);
+  // A line becomes draggable only after a long-press "unlocks" it (shown
+  // dashed); clicking that same dashed line again (without dragging)
+  // re-locks it (back to solid) instead of toggling on every plain click.
+  const editingLineRef = useRef<{ type: "horizontal" | "trend"; id: number } | null>(null);
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mouseDownPosRef = useRef<{ x: number; y: number } | null>(null);
+  const mouseMovedRef = useRef(false);
+  const wasEditingAtDownRef = useRef(false);
   const trendPendingRef = useRef<{ time: Time; price: number } | null>(null);
   const priceLineHandlesRef = useRef<Map<number, IPriceLine>>(new Map());
   // Persisted outside the big rebuild effect so drawPatternShapes/repositionArrows
@@ -497,6 +505,8 @@ export default function ChartStack({
       line.setAttribute("y1", `${y1}`);
       line.setAttribute("x2", `${x2}`);
       line.setAttribute("y2", `${y2}`);
+      const editing = editingLineRef.current?.type === "trend" && editingLineRef.current.id === trend.id;
+      line.setAttribute("stroke-dasharray", editing ? "6 4" : "none");
       label.setAttribute("x", `${(x1 + x2) / 2}`);
       label.setAttribute("y", `${(y1 + y2) / 2 - 8}`);
       label.textContent = `${i + 1}`;
@@ -518,7 +528,10 @@ export default function ChartStack({
           price: h.price,
           color: NEON,
           lineWidth: 2,
-          lineStyle: LineStyle.Solid,
+          lineStyle:
+            editingLineRef.current?.type === "horizontal" && editingLineRef.current.id === h.id
+              ? LineStyle.Dashed
+              : LineStyle.Solid,
           axisLabelVisible: true,
           title: `수평선 ${i + 1}`,
         }),
@@ -679,6 +692,14 @@ export default function ChartStack({
       // instead of floating a few bars in from the edge.
       timeScale: { borderColor: border, rightOffset: 0 },
       crosshair: { horzLine: { labelBackgroundColor: text } },
+      // Zoom only via mouse wheel; drag is left/right pan only (no vertical
+      // price-axis rescale-by-drag, no pinch/axis-drag zoom).
+      handleScroll: { mouseWheel: false, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
+      handleScale: {
+        mouseWheel: true,
+        pinch: false,
+        axisPressedMouseMove: { time: false, price: false },
+      },
     } as const;
 
     const charts: IChartApi[] = [];
@@ -1315,22 +1336,62 @@ export default function ChartStack({
       }
       return null;
     };
+    const LONG_PRESS_MS = 500;
+    const MOVE_CANCEL_PX = 4;
+    const isEditingHit = (hit: NonNullable<typeof dragRef.current>) =>
+      editingLineRef.current?.type === hit.type && editingLineRef.current.id === hit.id;
+    const restyleHit = (hit: NonNullable<typeof dragRef.current>) => {
+      if (hit.type === "horizontal") reapplyHorizontals();
+      else drawUserLines();
+    };
     const onDrawMouseDown = (e: MouseEvent) => {
       if (drawModeRef.current) return; // placing a new line takes priority
       const { x, y } = localXY(e);
       const hit = hitTestLines(x, y);
       if (!hit) return;
-      dragRef.current = hit;
       e.preventDefault();
+      mouseDownPosRef.current = { x, y };
+      mouseMovedRef.current = false;
+      wasEditingAtDownRef.current = isEditingHit(hit);
+      if (wasEditingAtDownRef.current) {
+        // already unlocked (dashed) — drag starts immediately
+        dragRef.current = hit;
+        return;
+      }
+      // locked — a long press unlocks it (dashed) and starts the drag; a
+      // quick click/release before the timer does nothing.
+      longPressTimerRef.current = setTimeout(() => {
+        longPressTimerRef.current = null;
+        if (mouseMovedRef.current) return;
+        editingLineRef.current = { type: hit.type, id: hit.id };
+        restyleHit(hit);
+        dragRef.current = hit;
+      }, LONG_PRESS_MS);
     };
     const onDrawMouseMove = (e: MouseEvent) => {
       const series = candleSeriesRef.current;
       const drag = dragRef.current;
       const { x, y } = localXY(e);
+      if (mouseDownPosRef.current) {
+        const moved = Math.hypot(x - mouseDownPosRef.current.x, y - mouseDownPosRef.current.y) > MOVE_CANCEL_PX;
+        if (moved) {
+          mouseMovedRef.current = true;
+          if (longPressTimerRef.current) {
+            clearTimeout(longPressTimerRef.current);
+            longPressTimerRef.current = null;
+          }
+        }
+      }
       if (!drag) {
         if (!drawModeRef.current && mainRef.current) {
           const hit = hitTestLines(x, y);
-          mainRef.current.style.cursor = hit ? (hit.type === "horizontal" ? "ns-resize" : "move") : "";
+          mainRef.current.style.cursor = !hit
+            ? ""
+            : isEditingHit(hit)
+              ? hit.type === "horizontal"
+                ? "ns-resize"
+                : "move"
+              : "pointer";
         }
         return;
       }
@@ -1353,7 +1414,21 @@ export default function ChartStack({
       }
     };
     const onDrawMouseUp = () => {
+      if (longPressTimerRef.current) {
+        clearTimeout(longPressTimerRef.current);
+        longPressTimerRef.current = null;
+      }
+      const hit = dragRef.current;
+      // A plain click (no drag) on a line that was ALREADY dashed before
+      // this mousedown re-locks it (solid) — editing confirmed done. A long
+      // press that just unlocked it during this same gesture leaves it
+      // dashed even if released without moving.
+      if (hit && wasEditingAtDownRef.current && !mouseMovedRef.current) {
+        editingLineRef.current = null;
+        restyleHit(hit);
+      }
       dragRef.current = null;
+      mouseDownPosRef.current = null;
     };
     mainRef.current.addEventListener("mousedown", onDrawMouseDown);
     window.addEventListener("mousemove", onDrawMouseMove);
@@ -1390,6 +1465,7 @@ export default function ChartStack({
       window.removeEventListener("mousemove", onDrawMouseMove);
       window.removeEventListener("mouseup", onDrawMouseUp);
       dragRef.current = null;
+      if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
       if (zoomTimerRef.current) clearTimeout(zoomTimerRef.current);
       mainApiRef.current = null;
       volumeApiRef.current = null;
