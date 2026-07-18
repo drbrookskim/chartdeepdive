@@ -1120,6 +1120,13 @@ export default function ChartStack({
     // Cloud fill redraw hook, wired to the pan/zoom + resize handlers below.
     // Populated inside the ichimoku block if that layer is on; a no-op otherwise.
     let drawCloud = () => {};
+    // Toggling ichimoku off (or switching symbol) still reruns this whole
+    // rebuild effect but leaves the cloudRef <svg> DOM node itself intact
+    // (it isn't destroyed/recreated with the chart) — without an explicit
+    // clear here, the polygon fill drawn while it was on just stayed on
+    // screen forever since drawCloud only ever gets reassigned, never a
+    // "remove what's there" call, when the layer is off.
+    if (cloudRef.current) cloudRef.current.innerHTML = "";
 
     // ---- layer 3: ichimoku ----
     if (layers.ichimoku && analysis?.advanced.ichimoku) {
@@ -1233,9 +1240,13 @@ export default function ChartStack({
 
     if (layers.elliott && analysis?.advanced.elliottWave?.impulse) {
       const imp = analysis.advanced.elliottWave.impulse;
+      // Was --accent-ink (a text/ink token, nearly blended into the candles)
+      // at width 2 — bumped to a dedicated high-contrast color + thicker
+      // line + bigger markers so the wave count reads at a glance instead
+      // of disappearing next to MA/Bollinger overlays.
       const wave = main.addLineSeries({
-        color: cssVar("--accent-ink"),
-        lineWidth: 2,
+        color: cssVar("--elliott"),
+        lineWidth: 3,
         priceLineVisible: false,
         lastValueVisible: false,
         crosshairMarkerVisible: false,
@@ -1245,14 +1256,18 @@ export default function ChartStack({
         staticMarkers.push({
           time: w.date as Time,
           position: "aboveBar",
-          color: cssVar("--accent"),
+          color: cssVar("--elliott"),
           shape: "circle",
           text: w.label,
+          size: 2,
         });
       }
     }
 
     if (layers.inflection && analysis?.advanced.inflectionPoints) {
+      // Bigger arrows (default marker size 1 read as tiny slivers against
+      // full OHLC candles) so a predicted turn is as visually loud as an
+      // actual pattern marker.
       for (const p of analysis.advanced.inflectionPoints.points) {
         staticMarkers.push({
           time: p.date as Time,
@@ -1260,6 +1275,7 @@ export default function ChartStack({
           color: cssVar(p.direction === "up" ? "--up" : "--down"),
           shape: p.direction === "up" ? "arrowUp" : "arrowDown",
           text: `변곡 ${p.confidence.toFixed(2)}`,
+          size: 2,
         });
       }
     }
