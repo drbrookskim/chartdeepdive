@@ -67,7 +67,7 @@ export function elliottWave(candles: Candle[], window = 10): ElliottResult {
   if (sw.length < 6) {
     return {
       impulse: null,
-      reason: `need at least 6 alternating swing points for a 1-5 count, found ${sw.length}`,
+      reason: `1~5파 카운트에 필요한 전환점(swing)이 최소 6개 필요하나 ${sw.length}개만 발견됨`,
       signal: 0,
     };
   }
@@ -91,9 +91,14 @@ export function elliottWave(candles: Candle[], window = 10): ElliottResult {
 
   const checks = { wave2Retrace, wave3NotShortest, wave4NoOverlap };
   if (!wave2Retrace || !wave3NotShortest || !wave4NoOverlap) {
+    const violated = !wave2Retrace
+      ? "파동2가 파동1 시작점을 되돌림"
+      : !wave3NotShortest
+        ? "파동3이 1·3·5파 중 최단파"
+        : "파동4가 파동1 가격대를 침범";
     return {
       impulse: null,
-      reason: "most recent 5-swing sequence violates an Elliott impulse rule",
+      reason: `최근 5파 구간이 엘리엇 임펄스 규칙 위반(${violated})`,
       signal: 0,
     };
   }

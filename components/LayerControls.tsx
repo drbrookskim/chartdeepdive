@@ -247,8 +247,15 @@ export default function LayerControls({
           <CheckRow
             label="엘리엇 파동"
             checked={layers.elliott}
-            disabled={!analysis?.advanced.elliottWave}
-            reason={un["advanced.elliottWave"]}
+            // The elliottWave object itself is always present — it's
+            // .impulse that's null when the most recent swing sequence
+            // doesn't satisfy the impulse rules, which used to leave the
+            // checkbox checkable-but-silently-empty (nothing ever drew on
+            // the chart, no indication why). .reason carries the specific
+            // rule that failed for *this* symbol/period, dynamic per
+            // analysis — not from the static `un` unavailable-reasons map.
+            disabled={!analysis?.advanced.elliottWave?.impulse}
+            reason={analysis?.advanced.elliottWave?.reason ?? un["advanced.elliottWave"]}
             onClick={() => onLayer("elliott")}
           />
           <CheckRow
