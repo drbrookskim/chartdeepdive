@@ -102,7 +102,7 @@ export default function LayerControls({
       <div className="layer">
         <button className="layer__head" onClick={() => onLayer("ma")}>
           <strong>① 기본 지표</strong>
-          <span className={`switch ${layers.ma || layers.bollinger || layers.volume || layers.rsi || layers.macd ? "on" : ""}`} />
+          <span className={`switch ${layers.ma || layers.bollinger || layers.volume || layers.volumeProfile || layers.rsi || layers.macd ? "on" : ""}`} />
         </button>
         <div className="layer__body">
           <CheckRow
@@ -142,6 +142,12 @@ export default function LayerControls({
             sub="서브패널"
             checked={layers.volume}
             onClick={() => onLayer("volume")}
+          />
+          <CheckRow
+            label="매물대"
+            sub="가격대별 거래량"
+            checked={layers.volumeProfile}
+            onClick={() => onLayer("volumeProfile")}
           />
           <CheckRow
             label="RSI"

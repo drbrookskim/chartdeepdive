@@ -770,6 +770,18 @@ button {
   color: var(--down);
 }
 
+/* volume profile (매물대): horizontal bars anchored to the price axis,
+   drawn low-opacity so candles remain readable on top; below .cloudlayer
+   so cloud fill / patterns / user lines still layer over it if they overlap */
+.volumeprofile {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+}
+
 /* ichimoku cloud fill: SVG polygon overlay, redrawn on pan/zoom/resize */
 .cloudlayer {
   position: absolute;

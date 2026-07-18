@@ -54,6 +54,7 @@ export interface LayerState {
   ema: boolean;
   bollinger: boolean;
   volume: boolean;
+  volumeProfile: boolean;
   rsi: boolean;
   macd: boolean;
   ichimoku: boolean;
@@ -273,6 +274,7 @@ export default function ChartStack({
   const cloudRef = useRef<SVGSVGElement>(null);
   const patternLinesRef = useRef<SVGSVGElement>(null);
   const userLinesRef = useRef<SVGSVGElement>(null);
+  const volumeProfileRef = useRef<SVGSVGElement>(null);
   const ohlcRef = useRef<HTMLDivElement>(null);
   const arrowsContainerRef = useRef<HTMLDivElement>(null);
   // User-drawn horizontal/trend lines (see the drawing-tool toolbar below).
@@ -486,15 +488,33 @@ export default function ChartStack({
       const line = document.createElementNS(SVG_NS, "line");
       line.setAttribute("stroke", NEON);
       line.setAttribute("stroke-width", "2");
+      // Badge (neon rect + black text) matching the horizontal price line's
+      // native axis-label look, instead of plain outlined text.
+      const badge = document.createElementNS(SVG_NS, "rect");
+      badge.setAttribute("fill", NEON);
+      badge.setAttribute("rx", "3");
       const label = document.createElementNS(SVG_NS, "text");
-      label.setAttribute("fill", NEON);
+      label.setAttribute("fill", "#000");
       label.setAttribute("font-size", "12");
       label.setAttribute("font-weight", "700");
-      label.setAttribute("paint-order", "stroke");
-      label.setAttribute("stroke", cssVar("--bg"));
-      label.setAttribute("stroke-width", "3");
+      // Resize handles — small circles at each endpoint, shown only while
+      // this trend is the one currently unlocked for editing (see
+      // editingLineRef), so dragging either end to change the line's length
+      // has an obvious grab target instead of relying on an invisible
+      // hit-test radius.
+      const handle1 = document.createElementNS(SVG_NS, "circle");
+      const handle2 = document.createElementNS(SVG_NS, "circle");
+      for (const h of [handle1, handle2]) {
+        h.setAttribute("r", "5");
+        h.setAttribute("fill", cssVar("--bg"));
+        h.setAttribute("stroke", NEON);
+        h.setAttribute("stroke-width", "2");
+      }
       g.appendChild(line);
+      g.appendChild(badge);
       g.appendChild(label);
+      g.appendChild(handle1);
+      g.appendChild(handle2);
       svg.appendChild(g);
     }
     while (svg.children.length > trendsRef.current.length) {
@@ -503,7 +523,10 @@ export default function ChartStack({
     trendsRef.current.forEach((trend, i) => {
       const g = svg.children[i] as SVGGElement;
       const line = g.children[0] as SVGLineElement;
-      const label = g.children[1] as SVGTextElement;
+      const badge = g.children[1] as SVGRectElement;
+      const label = g.children[2] as SVGTextElement;
+      const handle1 = g.children[3] as SVGCircleElement;
+      const handle2 = g.children[4] as SVGCircleElement;
       const x1 = main.timeScale().timeToCoordinate(trend.p1.time);
       const y1 = series.priceToCoordinate(trend.p1.price);
       const x2 = main.timeScale().timeToCoordinate(trend.p2.time);
@@ -519,9 +542,21 @@ export default function ChartStack({
       line.setAttribute("y2", `${y2}`);
       const editing = editingLineRef.current?.type === "trend" && editingLineRef.current.id === trend.id;
       line.setAttribute("stroke-dasharray", editing ? "6 4" : "none");
-      label.setAttribute("x", `${(x1 + x2) / 2}`);
-      label.setAttribute("y", `${(y1 + y2) / 2 - 8}`);
       label.textContent = `추세선 ${i + 1}`;
+      const midX = (x1 + x2) / 2;
+      const midY = (y1 + y2) / 2 - 8;
+      label.setAttribute("x", `${midX}`);
+      label.setAttribute("y", `${midY}`);
+      const box = label.getBBox();
+      badge.setAttribute("x", `${box.x - 5}`);
+      badge.setAttribute("y", `${box.y - 3}`);
+      badge.setAttribute("width", `${box.width + 10}`);
+      badge.setAttribute("height", `${box.height + 6}`);
+      handle1.setAttribute("cx", `${x1}`);
+      handle1.setAttribute("cy", `${y1}`);
+      handle2.setAttribute("cx", `${x2}`);
+      handle2.setAttribute("cy", `${y2}`);
+      handle1.style.display = handle2.style.display = editing ? "" : "none";
     });
   }, []);
 
@@ -769,6 +804,82 @@ export default function ChartStack({
     // not just a symbol change), so the old IPriceLine handles are already
     // gone with the old series; horizontalsRef is the durable source of truth.
     reapplyHorizontals();
+
+    // ---- volume profile (매물대): horizontal bars showing traded volume by
+    // price level, bucketed over the currently VISIBLE bars — the price axis
+    // autoscales to the visible window, so bucketing the whole loaded range
+    // (e.g. 10y of history) put most bins' price levels far outside that
+    // window, mapping to coordinates off the pane (only a handful of recent
+    // bins ever rendered). Recomputed on every pan/zoom via rangeHandler.
+    // Bucketed by each bar's close price; drawn behind the candles via low
+    // opacity rather than z-order (the candle pane isn't a layerable DOM
+    // node to draw under).
+    const VP_BINS = 24;
+    const VP_MAX_WIDTH_FRAC = 0.28;
+    const drawVolumeProfile = () => {
+      const svg = volumeProfileRef.current;
+      const series = candleSeriesRef.current;
+      if (!svg) return;
+      if (!layers.volumeProfile || !series || effectiveCandles.length === 0) {
+        svg.innerHTML = "";
+        return;
+      }
+      const SVG_NS = "http://www.w3.org/2000/svg";
+      const visRange = main.timeScale().getVisibleLogicalRange();
+      const fromIdx = visRange ? Math.max(0, Math.floor(visRange.from)) : 0;
+      const toIdx = visRange
+        ? Math.min(effectiveCandles.length - 1, Math.ceil(visRange.to))
+        : effectiveCandles.length - 1;
+      const visibleCandles = effectiveCandles.slice(fromIdx, toIdx + 1);
+      if (visibleCandles.length === 0) {
+        svg.innerHTML = "";
+        return;
+      }
+      let lo = Infinity;
+      let hi = -Infinity;
+      for (const c of visibleCandles) {
+        if (c.low < lo) lo = c.low;
+        if (c.high > hi) hi = c.high;
+      }
+      if (!Number.isFinite(lo) || !Number.isFinite(hi) || hi <= lo) {
+        svg.innerHTML = "";
+        return;
+      }
+      const bins = new Array(VP_BINS).fill(0);
+      const binSize = (hi - lo) / VP_BINS;
+      for (const c of visibleCandles) {
+        const idx = Math.min(VP_BINS - 1, Math.max(0, Math.floor((c.close - lo) / binSize)));
+        bins[idx] += c.volume;
+      }
+      const maxVol = Math.max(...bins, 1);
+      const axisWidth = Math.max(main.priceScale("right").width(), AXIS_WIDTH_FALLBACK);
+      const plotWidth = (mainRef.current?.clientWidth ?? 0) - axisWidth;
+      const maxBarPx = plotWidth * VP_MAX_WIDTH_FRAC;
+
+      while (svg.children.length < VP_BINS) svg.appendChild(document.createElementNS(SVG_NS, "rect"));
+      while (svg.children.length > VP_BINS) svg.lastChild?.remove();
+
+      for (let i = 0; i < VP_BINS; i++) {
+        const rect = svg.children[i] as SVGRectElement;
+        const priceTop = lo + (i + 1) * binSize;
+        const priceBottom = lo + i * binSize;
+        const yTop = series.priceToCoordinate(priceTop);
+        const yBottom = series.priceToCoordinate(priceBottom);
+        if (yTop == null || yBottom == null || bins[i] <= 0) {
+          rect.style.display = "none";
+          continue;
+        }
+        rect.style.display = "";
+        const barW = (bins[i] / maxVol) * maxBarPx;
+        rect.setAttribute("x", `${Math.max(0, plotWidth - barW)}`);
+        rect.setAttribute("y", `${Math.min(yTop, yBottom)}`);
+        rect.setAttribute("width", `${barW}`);
+        rect.setAttribute("height", `${Math.max(1, Math.abs(yBottom - yTop) - 1)}`);
+        rect.setAttribute("fill", cssVar("--accent"));
+        rect.setAttribute("opacity", "0.28");
+      }
+    };
+    drawVolumeProfile();
 
     // ---- volume sub-panel (own pane between main and RSI, not an overlay) ----
     if (layers.volume && volumeRef.current) {
@@ -1283,6 +1394,7 @@ export default function ChartStack({
       repositionArrows();
       drawPatternLinePositions();
       drawUserLines();
+      drawVolumeProfile();
     };
     main.timeScale().subscribeVisibleTimeRangeChange(rangeHandler);
     drawCloud();
@@ -1536,6 +1648,7 @@ export default function ChartStack({
       repositionArrows();
       drawPatternLinePositions();
       drawUserLines();
+      drawVolumeProfile();
     });
     if (mainRef.current) ro.observe(mainRef.current);
     drawUserLines();
@@ -1754,6 +1867,7 @@ export default function ChartStack({
         <div className={`panel__chart ${drawMode ? "drawing" : ""}`}>
           <div ref={ohlcRef} className="ohlcbar" />
           <div ref={mainRef} />
+          <svg ref={volumeProfileRef} className="volumeprofile" />
           <svg ref={cloudRef} className="cloudlayer" />
           <svg ref={patternLinesRef} className="patternlines" />
           <svg ref={userLinesRef} className="userlines" />

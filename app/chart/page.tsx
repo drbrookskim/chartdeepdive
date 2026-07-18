@@ -64,6 +64,7 @@ function ChartInner() {
     ema: false,
     bollinger: true,
     volume: true,
+    volumeProfile: false,
     rsi: true,
     macd: false,
     ichimoku: false,
