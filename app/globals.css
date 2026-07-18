@@ -194,7 +194,7 @@ button {
   align-items: center;
   justify-content: flex-start;
   padding: 32px;
-  padding-top: calc((100vh - 57px) * 0.33);
+  padding-top: calc((100vh - 57px) * 0.19);
   text-align: center;
   min-height: calc(100vh - 57px);
   background: var(--bg);
