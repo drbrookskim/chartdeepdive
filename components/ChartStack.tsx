@@ -511,11 +511,37 @@ export default function ChartStack({
         h.setAttribute("stroke", NEON);
         h.setAttribute("stroke-width", "2");
       }
+      // On-canvas delete button — a small × badge shown only while this
+      // trend is unlocked for editing, so removing a line no longer requires
+      // scrolling down to the toolbar's separate chip list. pointer-events
+      // is re-enabled just for this element since the whole svg has
+      // pointer-events:none; the actual click is handled by one delegated
+      // listener on the svg (see onLineDeleteClick below) keyed off
+      // data-del-type/data-del-id rather than a per-element listener, since
+      // these DOM nodes are pooled/reused across renders.
+      const delBtn = document.createElementNS(SVG_NS, "g");
+      delBtn.setAttribute("data-del-type", "trend");
+      delBtn.style.cursor = "pointer";
+      delBtn.style.pointerEvents = "auto";
+      const delCircle = document.createElementNS(SVG_NS, "circle");
+      delCircle.setAttribute("r", "8");
+      delCircle.setAttribute("fill", "#c0392b");
+      const delX = document.createElementNS(SVG_NS, "text");
+      delX.setAttribute("fill", "#fff");
+      delX.setAttribute("font-size", "11");
+      delX.setAttribute("font-weight", "700");
+      delX.setAttribute("text-anchor", "middle");
+      delX.setAttribute("dominant-baseline", "central");
+      delX.textContent = "×";
+      delBtn.appendChild(delCircle);
+      delBtn.appendChild(delX);
+
       g.appendChild(line);
       g.appendChild(badge);
       g.appendChild(label);
       g.appendChild(handle1);
       g.appendChild(handle2);
+      g.appendChild(delBtn);
       svg.appendChild(g);
     }
     while (svg.children.length > trendsRef.current.length) {
@@ -528,6 +554,7 @@ export default function ChartStack({
       const label = g.children[2] as SVGTextElement;
       const handle1 = g.children[3] as SVGCircleElement;
       const handle2 = g.children[4] as SVGCircleElement;
+      const delBtn = g.children[5] as SVGGElement;
       const x1 = main.timeScale().timeToCoordinate(trend.p1.time);
       const y1 = series.priceToCoordinate(trend.p1.price);
       const x2 = main.timeScale().timeToCoordinate(trend.p2.time);
@@ -558,6 +585,9 @@ export default function ChartStack({
       handle2.setAttribute("cx", `${x2}`);
       handle2.setAttribute("cy", `${y2}`);
       handle1.style.display = handle2.style.display = editing ? "" : "none";
+      delBtn.setAttribute("data-del-id", `${trend.id}`);
+      delBtn.setAttribute("transform", `translate(${box.x + box.width + 12}, ${box.y + box.height / 2 - 3})`);
+      delBtn.style.display = editing ? "" : "none";
     });
 
     // Horizontal lines' labels — the native IPriceLine axis label has no
@@ -576,8 +606,28 @@ export default function ChartStack({
         label.setAttribute("fill", "#000");
         label.setAttribute("font-size", "12");
         label.setAttribute("font-weight", "700");
+        // Same on-canvas delete affordance as the trend label (see the
+        // trend loop above for why this is a delegated click, not a
+        // per-element listener).
+        const delBtn = document.createElementNS(SVG_NS, "g");
+        delBtn.setAttribute("data-del-type", "horizontal");
+        delBtn.style.cursor = "pointer";
+        delBtn.style.pointerEvents = "auto";
+        const delCircle = document.createElementNS(SVG_NS, "circle");
+        delCircle.setAttribute("r", "8");
+        delCircle.setAttribute("fill", "#c0392b");
+        const delX = document.createElementNS(SVG_NS, "text");
+        delX.setAttribute("fill", "#fff");
+        delX.setAttribute("font-size", "11");
+        delX.setAttribute("font-weight", "700");
+        delX.setAttribute("text-anchor", "middle");
+        delX.setAttribute("dominant-baseline", "central");
+        delX.textContent = "×";
+        delBtn.appendChild(delCircle);
+        delBtn.appendChild(delX);
         g.appendChild(badge);
         g.appendChild(label);
+        g.appendChild(delBtn);
         hsvg.appendChild(g);
       }
       while (hsvg.children.length > horizontalsRef.current.length) {
@@ -588,6 +638,7 @@ export default function ChartStack({
         const g = hsvg.children[i] as SVGGElement;
         const badge = g.children[0] as SVGRectElement;
         const label = g.children[1] as SVGTextElement;
+        const delBtn = g.children[2] as SVGGElement;
         const y = series.priceToCoordinate(h.price);
         if (y == null) {
           g.style.display = "none";
@@ -603,6 +654,10 @@ export default function ChartStack({
         badge.setAttribute("y", `${box.y - 3}`);
         badge.setAttribute("width", `${box.width + 10}`);
         badge.setAttribute("height", `${box.height + 6}`);
+        const editing = editingLineRef.current?.type === "horizontal" && editingLineRef.current.id === h.id;
+        delBtn.setAttribute("data-del-id", `${h.id}`);
+        delBtn.setAttribute("transform", `translate(${box.x - 12}, ${box.y + box.height / 2 - 3})`);
+        delBtn.style.display = editing ? "" : "none";
       });
     }
   }, [currency]);
@@ -1557,6 +1612,16 @@ export default function ChartStack({
       if (!hit || !isEditingHit(hit)) finishEditing();
       if (!hit) return;
       e.preventDefault();
+      // Also stop the event from ever reaching lightweight-charts' own
+      // mousedown handling (registered on the canvas, a descendant of this
+      // container) — without this the library's own click-drag-to-pan
+      // gesture engaged *in parallel* with our own drag, so grabbing a
+      // line's endpoint to resize it instead panned the whole chart while
+      // the endpoint move happened invisibly underneath. Requires this
+      // listener to be registered in the capture phase (see addEventListener
+      // below) since by the time a bubble-phase listener on this ancestor
+      // would run, the canvas's own same-phase handler has already fired.
+      e.stopPropagation();
       mouseDownPosRef.current = { x, y };
       mouseMovedRef.current = false;
       wasEditingAtDownRef.current = isEditingHit(hit);
@@ -1671,9 +1736,34 @@ export default function ChartStack({
       dragRef.current = null;
       mouseDownPosRef.current = null;
     };
-    mainRef.current.addEventListener("mousedown", onDrawMouseDown);
+    mainRef.current.addEventListener("mousedown", onDrawMouseDown, true);
     window.addEventListener("mousemove", onDrawMouseMove);
     window.addEventListener("mouseup", onDrawMouseUp);
+    // On-canvas delete (×) buttons on the currently-editing line's badge —
+    // delegated to one listener per overlay svg since the badge <g> nodes
+    // are pooled/reused across redraws (see drawUserLines), so attaching a
+    // fresh listener per node on every redraw would leak.
+    const onLineDeleteClick = (e: MouseEvent) => {
+      const target = (e.target as Element).closest("[data-del-type]");
+      if (!target) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const type = target.getAttribute("data-del-type");
+      const id = Number(target.getAttribute("data-del-id"));
+      if (type === "horizontal") {
+        horizontalsRef.current = horizontalsRef.current.filter((h) => h.id !== id);
+        reapplyHorizontals();
+      } else if (type === "trend") {
+        trendsRef.current = trendsRef.current.filter((t) => t.id !== id);
+      }
+      if (editingLineRef.current?.type === type && editingLineRef.current.id === id) {
+        editingLineRef.current = null;
+      }
+      drawUserLines();
+      setDrawingsTick((t) => t + 1);
+    };
+    userLinesRef.current?.addEventListener("mousedown", onLineDeleteClick, true);
+    hLabelsRef.current?.addEventListener("mousedown", onLineDeleteClick, true);
     // Clicking anywhere outside the chart entirely (sidebar, header, ...)
     // also finishes editing — onDrawMouseDown only covers clicks inside the
     // chart itself. Capture phase so it fires before the click's own handler.
@@ -1710,10 +1800,12 @@ export default function ChartStack({
       main.unsubscribeCrosshairMove(crosshairHandler);
       main.timeScale().unsubscribeVisibleTimeRangeChange(rangeHandler);
       main.unsubscribeClick(onChartClick);
-      mainRef.current?.removeEventListener("mousedown", onDrawMouseDown);
+      mainRef.current?.removeEventListener("mousedown", onDrawMouseDown, true);
       window.removeEventListener("mousemove", onDrawMouseMove);
       window.removeEventListener("mouseup", onDrawMouseUp);
       document.removeEventListener("mousedown", onDocumentMouseDown, true);
+      userLinesRef.current?.removeEventListener("mousedown", onLineDeleteClick, true);
+      hLabelsRef.current?.removeEventListener("mousedown", onLineDeleteClick, true);
       dragRef.current = null;
       if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
       if (zoomTimerRef.current) clearTimeout(zoomTimerRef.current);

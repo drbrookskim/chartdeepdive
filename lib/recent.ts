@@ -29,3 +29,13 @@ export function pushRecent(item: SearchResult): SearchResult[] {
   }
   return next;
 }
+
+export function removeRecent(symbol: string): SearchResult[] {
+  const next = getRecent().filter((r) => r.symbol !== symbol);
+  try {
+    localStorage.setItem(KEY, JSON.stringify(next));
+  } catch {
+    /* quota/full — ignore, non-critical */
+  }
+  return next;
+}

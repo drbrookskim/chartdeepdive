@@ -6,7 +6,7 @@ import { useSession, signIn, signOut } from "next-auth/react";
 import ThemeToggle from "@/components/ThemeToggle";
 import SearchBox from "@/components/SearchBox";
 import type { SearchResult, Market } from "@/lib/api";
-import { getRecent, pushRecent } from "@/lib/recent";
+import { getRecent, pushRecent, removeRecent } from "@/lib/recent";
 
 export default function SearchPage() {
   const router = useRouter();
@@ -88,15 +88,23 @@ export default function SearchPage() {
                 <div className="recent__label">최근 검색</div>
                 <div className="recent__chips">
                   {recent.map((r) => (
-                    <button
-                      key={r.symbol}
-                      className="chip"
-                      data-initial={r.name.slice(0, 1)}
-                      onClick={() => select(r)}
-                    >
-                      <strong>{r.name}</strong>
-                      <small>{r.symbol}</small>
-                    </button>
+                    <div key={r.symbol} className="chipholder">
+                      <button className="chip" data-initial={r.name.slice(0, 1)} onClick={() => select(r)}>
+                        <strong>{r.name}</strong>
+                        <small>{r.symbol}</small>
+                      </button>
+                      <button
+                        className="chipremove"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setRecent(removeRecent(r.symbol));
+                        }}
+                        aria-label={`${r.name} 최근 검색에서 삭제`}
+                        title="삭제"
+                      >
+                        ×
+                      </button>
+                    </div>
                   ))}
                 </div>
               </div>

@@ -408,6 +408,34 @@ button {
   justify-content: center;
   flex-wrap: wrap;
 }
+.chipholder {
+  position: relative;
+}
+.chipremove {
+  position: absolute;
+  top: -2px;
+  right: 6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-faint);
+  font-size: 12px;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+.chipholder:hover .chipremove {
+  display: flex;
+}
+.chipremove:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
 .chip {
   display: flex;
   flex-direction: column;
