@@ -5,7 +5,7 @@
 import type { SearchResult } from "@/lib/schema";
 
 const KEY = "cdd-recent";
-const MAX = 8;
+const MAX = 12;
 
 export function getRecent(): SearchResult[] {
   if (typeof window === "undefined") return [];

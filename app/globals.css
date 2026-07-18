@@ -485,6 +485,39 @@ button {
   font-family: var(--mono);
   font-size: 10px;
 }
+.chip--toggle {
+  cursor: pointer;
+}
+.chip--toggle::before {
+  content: none;
+}
+.chip__toggleicon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  transition: transform 0.15s, border-color 0.15s;
+}
+.chip--toggle:hover .chip__toggleicon {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+.chip__toggleicon::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  border-right: 2px solid var(--accent);
+  border-bottom: 2px solid var(--accent);
+  transform: rotate(45deg);
+  margin-top: -4px;
+}
+.chip__toggleicon[data-expanded="true"]::before {
+  transform: rotate(-135deg);
+  margin-top: 4px;
+}
 
 /* ---------- Screen B: chart ---------- */
 .appbar {

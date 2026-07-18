@@ -16,10 +16,14 @@ export default function SearchPage() {
     US: true,
   });
   const [recent, setRecent] = useState<SearchResult[]>([]);
+  const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
     setRecent(getRecent());
   }, []);
+
+  const RECENT_COLLAPSED = 6;
+  const visibleRecent = expanded ? recent : recent.slice(0, RECENT_COLLAPSED);
 
   function select(r: SearchResult) {
     pushRecent(r);
@@ -87,7 +91,7 @@ export default function SearchPage() {
               <div className="recent">
                 <div className="recent__label">최근 검색</div>
                 <div className="recent__chips">
-                  {recent.map((r) => (
+                  {visibleRecent.map((r) => (
                     <div key={r.symbol} className="chipholder">
                       <button className="chip" data-initial={r.name.slice(0, 1)} onClick={() => select(r)}>
                         <strong>{r.name}</strong>
@@ -106,6 +110,15 @@ export default function SearchPage() {
                       </button>
                     </div>
                   ))}
+                  {recent.length > RECENT_COLLAPSED && (
+                    <button
+                      className="chip chip--toggle"
+                      onClick={() => setExpanded((v) => !v)}
+                    >
+                      <span className="chip__toggleicon" data-expanded={expanded} />
+                      <strong>{expanded ? "간략히" : "더보기"}</strong>
+                    </button>
+                  )}
                 </div>
               </div>
             )}
