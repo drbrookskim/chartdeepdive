@@ -274,6 +274,7 @@ export default function ChartStack({
   const cloudRef = useRef<SVGSVGElement>(null);
   const patternLinesRef = useRef<SVGSVGElement>(null);
   const userLinesRef = useRef<SVGSVGElement>(null);
+  const hLabelsRef = useRef<SVGSVGElement>(null);
   const volumeProfileRef = useRef<SVGSVGElement>(null);
   const ohlcRef = useRef<HTMLDivElement>(null);
   const arrowsContainerRef = useRef<HTMLDivElement>(null);
@@ -558,7 +559,53 @@ export default function ChartStack({
       handle2.setAttribute("cy", `${y2}`);
       handle1.style.display = handle2.style.display = editing ? "" : "none";
     });
-  }, []);
+
+    // Horizontal lines' labels — the native IPriceLine axis label has no
+    // font-weight option, so it's hidden (reapplyHorizontals sets
+    // axisLabelVisible: false) and replaced with a bold badge here, styled
+    // like the trend label, right-aligned just inside the price axis gutter.
+    const hsvg = hLabelsRef.current;
+    if (hsvg) {
+      hsvg.style.clipPath = `inset(0 ${axisWidth}px 0 0)`;
+      while (hsvg.children.length < horizontalsRef.current.length) {
+        const g = document.createElementNS(SVG_NS, "g");
+        const badge = document.createElementNS(SVG_NS, "rect");
+        badge.setAttribute("fill", NEON);
+        badge.setAttribute("rx", "3");
+        const label = document.createElementNS(SVG_NS, "text");
+        label.setAttribute("fill", "#000");
+        label.setAttribute("font-size", "12");
+        label.setAttribute("font-weight", "700");
+        g.appendChild(badge);
+        g.appendChild(label);
+        hsvg.appendChild(g);
+      }
+      while (hsvg.children.length > horizontalsRef.current.length) {
+        hsvg.lastChild?.remove();
+      }
+      const plotWidth = (mainRef.current?.clientWidth ?? 0) - axisWidth;
+      horizontalsRef.current.forEach((h, i) => {
+        const g = hsvg.children[i] as SVGGElement;
+        const badge = g.children[0] as SVGRectElement;
+        const label = g.children[1] as SVGTextElement;
+        const y = series.priceToCoordinate(h.price);
+        if (y == null) {
+          g.style.display = "none";
+          return;
+        }
+        g.style.display = "";
+        label.textContent = `수평선 ${i + 1}  ${formatAxisPrice(h.price, currency)}`;
+        label.setAttribute("y", `${y + 4}`);
+        const w = label.getBBox().width;
+        label.setAttribute("x", `${Math.max(0, plotWidth - w - 6)}`);
+        const box = label.getBBox();
+        badge.setAttribute("x", `${box.x - 5}`);
+        badge.setAttribute("y", `${box.y - 3}`);
+        badge.setAttribute("width", `${box.width + 10}`);
+        badge.setAttribute("height", `${box.height + 6}`);
+      });
+    }
+  }, [currency]);
 
   // Recreates every horizontal line's IPriceLine from horizontalsRef, in
   // array order, so the title numbering ("수평선 N") always matches current
@@ -579,7 +626,10 @@ export default function ChartStack({
             editingLineRef.current?.type === "horizontal" && editingLineRef.current.id === h.id
               ? LineStyle.Dashed
               : LineStyle.Solid,
-          axisLabelVisible: true,
+          // The native axis label can't be set bold (no such option in
+          // PriceLineOptions) — hidden here and replaced with our own bold
+          // SVG badge (see drawUserLines) so it matches the trend line label.
+          axisLabelVisible: false,
           title: `수평선 ${i + 1}`,
         }),
       ]),
@@ -1412,6 +1462,7 @@ export default function ChartStack({
       if (mode === "horizontal") {
         horizontalsRef.current.push({ id: ++drawingIdRef.current, price });
         reapplyHorizontals();
+        drawUserLines();
         setDrawingsTick((t) => t + 1);
         return;
       }
@@ -1559,6 +1610,7 @@ export default function ChartStack({
         if (!h) return;
         h.price = price;
         priceLineHandlesRef.current.get(drag.id)?.applyOptions({ price });
+        drawUserLines(); // reposition the custom bold label to follow the drag
       } else if (drag.end === "body") {
         // Translate both endpoints by the same pixel delta so the segment
         // keeps its shape instead of pivoting around one point. Clamped to
@@ -1801,6 +1853,7 @@ export default function ChartStack({
   function removeHorizontal(id: number) {
     horizontalsRef.current = horizontalsRef.current.filter((h) => h.id !== id);
     reapplyHorizontals();
+    drawUserLines();
     setDrawingsTick((t) => t + 1);
   }
 
@@ -1871,6 +1924,7 @@ export default function ChartStack({
           <svg ref={cloudRef} className="cloudlayer" />
           <svg ref={patternLinesRef} className="patternlines" />
           <svg ref={userLinesRef} className="userlines" />
+          <svg ref={hLabelsRef} className="userlines" />
           <div ref={arrowsContainerRef} className="patternarrows" />
         </div>
         <div
