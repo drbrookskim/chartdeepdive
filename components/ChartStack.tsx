@@ -384,6 +384,17 @@ export default function ChartStack({
   const loadingMoreRef = useRef(false);
   const noMoreHistoryRef = useRef(false);
   const restoreRangeRef = useRef<{ from: Time; to: Time } | null>(null);
+  // Latest user-set visible bar range (logical/bar-index, not dates) — kept
+  // continuously up to date by rangeHandler below and consulted by
+  // applyDefaultRange() so toggling a layer checkbox (which recreates the
+  // whole chart instance) reopens at the same pan/zoom the user had, instead
+  // of snapping back to the default 3-month view every time. Cleared on a
+  // real symbol change (see the effect below) so a *new* stock still starts
+  // at the default view rather than inheriting the old one's scroll position.
+  const preservedRangeRef = useRef<{ from: number; to: number } | null>(null);
+  useEffect(() => {
+    preservedRangeRef.current = null;
+  }, [symbol, market]);
 
   // Repositions every persistent pattern arrow to match the main pane's
   // current time/price scale — called after drawPatternShapes and on every
@@ -1024,6 +1035,12 @@ export default function ChartStack({
         restoreRangeRef.current = null;
       } else if (isIntraday) {
         main.timeScale().fitContent();
+      } else if (preservedRangeRef.current) {
+        // A layer checkbox (MA/Bollinger/ichimoku/...) was toggled, which
+        // recreates the whole chart instance — reopen at the same bars the
+        // user had scrolled/zoomed to instead of resetting to the default
+        // window. Cleared on an actual symbol change (see the effect above).
+        main.timeScale().setVisibleLogicalRange(preservedRangeRef.current);
       } else {
         // Up to MAX_HISTORY_YEARS of daily data is loaded so the user can pan
         // freely into the past, but the initial viewport only shows the most
@@ -1509,6 +1526,8 @@ export default function ChartStack({
     }
 
     const rangeHandler = () => {
+      const logical = main.timeScale().getVisibleLogicalRange();
+      if (logical) preservedRangeRef.current = { from: logical.from, to: logical.to };
       drawCloud();
       checkZoomResolution();
       checkLoadMore();
@@ -2059,6 +2078,16 @@ export default function ChartStack({
               <span><i style={{ background: "var(--continuation)" }} />선행A</span>
               <span><i style={{ background: "var(--gapcat)" }} />선행B</span>
             </>
+          )}
+          {layers.elliott && (
+            <span title="엘리엇 파동: 추세 5파(1→2→3→4→5) 뒤 조정 3파(A→B→C)가 이어지는 구조. 캔들 위 원형 마커의 숫자/알파벳이 각 파동의 순서.">
+              <i style={{ background: "var(--elliott)" }} />엘리엇파동(1~5·A~C)
+            </span>
+          )}
+          {layers.inflection && (
+            <span title="변곡점 예측: 추세가 곧 꺾일 것으로 예측되는 지점. 거래량 이상·RSI/OBV 다이버전스·볼린저밴드 수축 등 규칙 기반 신호를 종합한 신뢰도(0~1, 1에 가까울수록 신호가 강함)를 화살표 옆 숫자로 표시.">
+              <i style={{ background: "var(--up)" }} />▲/<i style={{ background: "var(--down)" }} />▼ 변곡(신뢰도 0~1)
+            </span>
           )}
           <span>
             <i style={{ background: "var(--up)" }} />▲상승 /{" "}
