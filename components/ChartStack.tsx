@@ -1310,6 +1310,49 @@ export default function ChartStack({
     patternArrowsRef.current = new Map();
     drawPatternShapes(selectedPatterns);
 
+    // Same bouncing neon-outlined arrows checked patterns get (see
+    // patternArrowsRef inside drawPatternShapes) — added *after* the wipe
+    // above, which clears the whole Map on every rebuild (including
+    // unrelated layer toggles); adding these earlier just had them deleted
+    // a few lines later.
+    if (layers.elliott && analysis?.advanced.elliottWave?.impulse && arrowsContainerRef.current) {
+      const waves = analysis.advanced.elliottWave.impulse.waves;
+      const last = waves[waves.length - 1];
+      const prevWave = waves[waves.length - 2];
+      if (last) {
+        // Direction from the actual price move into this point (not the
+        // 1/3/5 vs 2/4/A/C label, which only reads "up" if the whole
+        // impulse count happens to be bullish) — one arrow at the most
+        // recent wave, the actionable "where are we now" spot; earlier
+        // wave points already have their own numbered circle markers.
+        const isLow = prevWave ? last.price <= prevWave.price : true;
+        const el = document.createElement("div");
+        el.className = `patternpulse ${isLow ? "up" : "down"} animate`;
+        el.textContent = isLow ? "▲" : "▼";
+        el.dataset.time = last.date;
+        el.dataset.price = String(last.price);
+        el.dataset.dir = isLow ? "up" : "down";
+        arrowsContainerRef.current.appendChild(el);
+        patternArrowsRef.current.set("elliott-wave", el);
+      }
+    }
+    if (layers.inflection && analysis?.advanced.inflectionPoints && arrowsContainerRef.current) {
+      // One persistent bouncing arrow per predicted turn — same visual
+      // language as a checked pattern, not just the small static glyph the
+      // series marker above already gives it.
+      analysis.advanced.inflectionPoints.points.forEach((p, i) => {
+        const el = document.createElement("div");
+        el.className = `patternpulse ${p.direction === "up" ? "up" : "down"} animate`;
+        el.textContent = p.direction === "up" ? "▲" : "▼";
+        el.dataset.time = p.date;
+        el.dataset.price = String(p.price);
+        el.dataset.dir = p.direction === "up" ? "up" : "down";
+        arrowsContainerRef.current!.appendChild(el);
+        patternArrowsRef.current.set(`inflection-${i}`, el);
+      });
+    }
+    repositionArrows();
+
     // NOT another main.timeScale().fitContent() here: the restore-or-fit
     // decision already made right after candle/volume data was set (above)
     // is the one that must stick — an unconditional refit here was
