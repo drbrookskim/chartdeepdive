@@ -214,11 +214,6 @@ button {
   max-width: 580px;
   margin: 0 auto;
 }
-.searchhero .googlesignin {
-  /* same gap as title-to-searchbox (h1's margin-bottom) so both spaces
-     read as one consistent rhythm, not searchbox-hugs-button */
-  margin-top: 28px;
-}
 .googlesignin {
   display: inline-flex;
   align-items: center;
