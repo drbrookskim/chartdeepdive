@@ -183,6 +183,18 @@ function ChartInner() {
     [patterns],
   );
 
+  // "신호요약" pill wants a buy/sell verdict at a glance, not just a neutral
+  // label — sums the two indicators that already carry a directional
+  // 1/-1/0 signal (일목균형표, 엘리엇 파동; patterns/변곡점 don't have one).
+  // Net > 0 = buy, < 0 = sell, 0 (agree-to-disagree, or neither available) =
+  // no verdict, keep the plain neutral label.
+  const overallSignal = useMemo((): 1 | -1 | 0 => {
+    const ichSignal = analysis?.advanced.ichimoku?.signal ?? 0;
+    const ellSignal = analysis?.advanced.elliottWave?.impulse ? analysis.advanced.elliottWave.signal : 0;
+    const sum = ichSignal + ellSignal;
+    return sum > 0 ? 1 : sum < 0 ? -1 : 0;
+  }, [analysis]);
+
   const summary = useMemo(() => {
     const cs = ohlcv?.candles ?? [];
     if (cs.length < 1) return null;
@@ -275,17 +287,22 @@ function ChartInner() {
               {summary.up ? "▲" : "▼"} {formatSigned(summary.pct)}% (
               {formatSigned(summary.delta, currency === "KRW" ? 0 : 2)})
             </span>
-            <button className="signalbtn" onClick={() => setShowSignals((s) => !s)}>
-              신호요약 →
-            </button>
+            <span className="signalwrap">
+              <button
+                className={`signalbtn ${overallSignal === 1 ? "up" : overallSignal === -1 ? "down" : ""}`}
+                onClick={() => setShowSignals((s) => !s)}
+              >
+                {overallSignal === 1 ? "매수신호요약" : overallSignal === -1 ? "매도신호요약" : "신호요약"} →
+              </button>
+              {showSignals && (
+                <SignalPopover
+                  analysis={analysis}
+                  topPattern={topPattern}
+                  onClose={() => setShowSignals(false)}
+                />
+              )}
+            </span>
           </>
-        )}
-        {showSignals && (
-          <SignalPopover
-            analysis={analysis}
-            topPattern={topPattern}
-            onClose={() => setShowSignals(false)}
-          />
         )}
       </div>
 

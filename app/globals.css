@@ -634,6 +634,22 @@ button {
   color: var(--accent);
   background: var(--accent-soft);
 }
+/* buy/sell verdict overrides the neutral black/accent look in both themes —
+   a directional call is more useful painted in the app's own up/down
+   colors than left theme-neutral. */
+:root .signalbtn.up {
+  background: var(--up);
+  color: #fff;
+}
+:root .signalbtn.down {
+  background: var(--down);
+  color: #fff;
+}
+
+.signalwrap {
+  position: relative;
+  display: inline-flex;
+}
 
 .layoutgrid {
   display: grid;
@@ -1252,8 +1268,8 @@ button {
 /* signal popover */
 .signalpop {
   position: absolute;
-  top: calc(100% - 6px);
-  right: 20px;
+  top: 0;
+  left: calc(100% + 8px);
   width: 280px;
   background: var(--surface); /* opaque */
   border: 1px solid var(--border);
