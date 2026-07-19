@@ -35,6 +35,19 @@ import {
  * deliberately theme-independent so it always pops against candles. */
 const NEON = "#39ff14";
 
+/** Positions the shared detail balloon (.chartballoon) at (x, anchorTop),
+ * flipping to render BELOW the anchor instead of above when there isn't
+ * enough room above — otherwise a badge near the top of the pane clips the
+ * balloon's top against the container's overflow:hidden. */
+function placeChartBalloon(popup: HTMLDivElement, x: number, anchorTop: number) {
+  const FLIP_MARGIN = 8;
+  const height = popup.offsetHeight;
+  const fitsAbove = anchorTop - 14 - height >= FLIP_MARGIN;
+  popup.classList.toggle("chartballoon--below", !fitsAbove);
+  popup.style.top = `${fitsAbove ? anchorTop - 14 : anchorTop + 14}px`;
+  popup.style.left = `${x}px`;
+}
+
 type Candle = OhlcvResponse["candles"][number];
 
 /** Compact volume abbreviation (1.2M / 34.1K) for the OHLC hover legend. */
@@ -441,8 +454,7 @@ export default function ChartStack({
       popup.innerHTML = html;
       openDetailKeyRef.current = key;
       popup.style.display = "block";
-      popup.style.left = anchorEl.style.left;
-      popup.style.top = `${parseFloat(anchorEl.style.top) - 14}px`;
+      placeChartBalloon(popup, parseFloat(anchorEl.style.left), parseFloat(anchorEl.style.top));
     },
     [closeDetailPopup],
   );
@@ -529,8 +541,7 @@ export default function ChartStack({
       if (openDetailKeyRef.current !== key || !detailPopupRef.current) return;
       const popup = detailPopupRef.current;
       popup.style.display = "block";
-      popup.style.left = `${Math.min(Math.max(x, 90), plotWidth - 90)}px`;
-      popup.style.top = `${top - 14}px`;
+      placeChartBalloon(popup, Math.min(Math.max(x, 90), plotWidth - 90), top);
     };
     for (const [key, el] of patternArrowsRef.current) {
       const t = el.dataset.time;

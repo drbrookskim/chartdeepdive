@@ -1080,6 +1080,20 @@ button {
   border-bottom: 1px solid var(--border);
   transform: translateX(-50%) rotate(45deg);
 }
+/* flipped when there's no room above the anchor (see placeChartBalloon in
+   ChartStack.tsx) — balloon grows downward, caret moves to the top edge and
+   points up instead of down */
+.chartballoon--below {
+  transform: translate(-50%, 0);
+}
+.chartballoon--below::after {
+  bottom: auto;
+  top: -6px;
+  border-right: none;
+  border-bottom: none;
+  border-left: 1px solid var(--border);
+  border-top: 1px solid var(--border);
+}
 .chartballoon__head {
   font-weight: 700;
   margin-bottom: 4px;
