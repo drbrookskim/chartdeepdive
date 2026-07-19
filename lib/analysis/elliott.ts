@@ -1,8 +1,9 @@
 // Elliott Wave (ported from the `elliott-wave` skill spec). Deterministic,
-// single "simplest effective interpretation" strategy: detect swing points, take
-// the most recent 5-swing sequence, and validate it as a 1-2-3-4-5 impulse
-// against the three iron rules. This intentionally reports at most one impulse
-// interpretation and abstains rather than guessing when rules are violated.
+// single "simplest effective interpretation" strategy: detect swing points,
+// then scan 6-swing windows from most recent backward for the first one that
+// validates as a 1-2-3-4-5 impulse against the three iron rules. Reports at
+// most one impulse interpretation (the most recent valid one) and abstains
+// rather than guessing when no window in the series validates.
 
 import type { Candle } from "@/lib/schema";
 
@@ -62,22 +63,10 @@ function swings(candles: Candle[], window = 10): Swing[] {
   return cleaned;
 }
 
-export function elliottWave(candles: Candle[], window = 10): ElliottResult {
-  const sw = swings(candles, window);
-  if (sw.length < 6) {
-    return {
-      impulse: null,
-      reason: `1~5파 카운트에 필요한 전환점(swing)이 최소 6개 필요하나 ${sw.length}개만 발견됨`,
-      signal: 0,
-    };
-  }
-  // Take the last 6 swings -> 5 waves (P0->P1..P5). Determine direction from P0->P1.
-  const pts = sw.slice(-6);
+/** Validate one 6-swing window (P0..P5) as a 1-2-3-4-5 impulse. */
+function checkImpulse(pts: Swing[]) {
   const up = pts[1].price > pts[0].price;
-  const direction: "up" | "down" = up ? "up" : "down";
-
   const p = pts.map((s) => s.price);
-  // Wave lengths.
   const w1 = Math.abs(p[1] - p[0]);
   const w3 = Math.abs(p[3] - p[2]);
   const w5 = Math.abs(p[5] - p[4]);
@@ -89,34 +78,61 @@ export function elliottWave(candles: Candle[], window = 10): ElliottResult {
   // Rule 3: wave 4 does not enter wave 1 territory.
   const wave4NoOverlap = up ? p[4] > p[1] : p[4] < p[1];
 
-  const checks = { wave2Retrace, wave3NotShortest, wave4NoOverlap };
-  if (!wave2Retrace || !wave3NotShortest || !wave4NoOverlap) {
-    const violated = !wave2Retrace
+  return {
+    up,
+    valid: wave2Retrace && wave3NotShortest && wave4NoOverlap,
+    checks: { wave2Retrace, wave3NotShortest, wave4NoOverlap },
+    violated: !wave2Retrace
       ? "파동2가 파동1 시작점을 되돌림"
       : !wave3NotShortest
         ? "파동3이 1·3·5파 중 최단파"
-        : "파동4가 파동1 가격대를 침범";
+        : "파동4가 파동1 가격대를 침범",
+  };
+}
+
+export function elliottWave(candles: Candle[], window = 10): ElliottResult {
+  const sw = swings(candles, window);
+  if (sw.length < 6) {
     return {
       impulse: null,
-      reason: `최근 5파 구간이 엘리엇 임펄스 규칙 위반(${violated})`,
+      reason: `1~5파 카운트에 필요한 전환점(swing)이 최소 6개 필요하나 ${sw.length}개만 발견됨`,
       signal: 0,
     };
   }
 
-  const waves: WaveLabel[] = pts.slice(1).map((s, idx) => ({
-    label: String(idx + 1),
-    date: s.date,
-    price: s.price,
-  }));
-  // "Completed" if the final swing (wave 5) is near the end of the series.
-  const completed = pts[5].index >= candles.length - window - 1;
-  // Signal: a completed 5-wave advance -> sell; completed 5-wave decline -> buy.
-  let signal: 1 | -1 | 0 = 0;
-  if (completed) signal = up ? -1 : 1;
+  // Scan every 6-swing window from most recent backward; report the first
+  // (i.e. most recent) one that validates as a clean impulse.
+  let lastViolation = "";
+  for (let end = sw.length; end >= 6; end--) {
+    const pts = sw.slice(end - 6, end);
+    const result = checkImpulse(pts);
+    if (!result.valid) {
+      if (end === sw.length) lastViolation = result.violated;
+      continue;
+    }
+
+    const direction: "up" | "down" = result.up ? "up" : "down";
+    const waves: WaveLabel[] = pts.slice(1).map((s, idx) => ({
+      label: String(idx + 1),
+      date: s.date,
+      price: s.price,
+    }));
+    // "Completed" if the final swing (wave 5) is near the end of the series.
+    const completed = pts[5].index >= candles.length - window - 1;
+    // Signal: a completed 5-wave advance -> sell; completed 5-wave decline -> buy.
+    let signal: 1 | -1 | 0 = 0;
+    if (completed) signal = result.up ? -1 : 1;
+
+    return {
+      impulse: { direction, waves, checks: result.checks, completed },
+      reason: null,
+      signal,
+    };
+  }
 
   return {
-    impulse: { direction, waves, checks, completed },
-    reason: null,
-    signal,
+    impulse: null,
+    reason: `전체 구간(전환점 ${sw.length}개)에서 규칙을 만족하는 1~5파 임펄스를 찾지 못함(가장 최근 구간 위반 사유: ${lastViolation})`,
+    signal: 0,
   };
 }
