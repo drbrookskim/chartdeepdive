@@ -355,42 +355,49 @@ function gaps(candles: Candle[]): Pattern[] {
   return out;
 }
 
-// ---------- Golden / Dead Cross (MA20 x MA60) ----------
+// ---------- Golden / Dead Cross (every MA period pair) ----------
 
 // Deterministic, not probabilistic like the other detectors — a crossover
-// either happened or didn't, so confidence is always 1. Uses the same 20/60
-// pair already plotted as the chart's two named MA overlay lines, so the
-// flagged point matches what's visibly crossing on the chart.
-const CROSS_SHORT = 20;
-const CROSS_LONG = 60;
+// either happened or didn't, so confidence is always 1. Checks every pair
+// among the chart's plotted MA periods, so any two overlay lines crossing
+// (not just 20x60) is flagged.
+const CROSS_PERIODS = [5, 10, 20, 60, 120];
 
 function movingAverageCrosses(candles: Candle[]): Pattern[] {
   const out: Pattern[] = [];
-  if (candles.length < CROSS_LONG + 1) return out;
   const closes = candles.map((c) => c.close);
-  const short = sma(closes, CROSS_SHORT);
-  const long = sma(closes, CROSS_LONG);
-  for (let i = 1; i < candles.length; i++) {
-    const s0 = short[i - 1];
-    const s1 = short[i];
-    const l0 = long[i - 1];
-    const l1 = long[i];
-    if (s0 == null || s1 == null || l0 == null || l1 == null) continue;
-    const prevDiff = s0 - l0;
-    const curDiff = s1 - l1;
-    if (prevDiff === 0 || Math.sign(prevDiff) === Math.sign(curDiff)) continue;
-    const golden = curDiff > 0;
-    out.push({
-      type: golden ? "golden-cross" : "dead-cross",
-      category: "cross",
-      confidence: 1,
-      range: { start: candles[i - 1].date, end: candles[i].date },
-      keyPoints: [
-        { date: candles[i - 1].date, price: s0, kind: golden ? "golden-cross" : "dead-cross" },
-        { date: candles[i].date, price: s1, kind: golden ? "golden-cross" : "dead-cross" },
-      ],
-      note: `${CROSS_SHORT}일선이 ${CROSS_LONG}일선을 ${golden ? "상향" : "하향"} 돌파`,
-    });
+  const smaByPeriod = new Map(CROSS_PERIODS.map((p) => [p, sma(closes, p)]));
+  for (let a = 0; a < CROSS_PERIODS.length; a++) {
+    for (let b = a + 1; b < CROSS_PERIODS.length; b++) {
+      const shortPeriod = CROSS_PERIODS[a];
+      const longPeriod = CROSS_PERIODS[b];
+      if (candles.length < longPeriod + 1) continue;
+      const short = smaByPeriod.get(shortPeriod)!;
+      const long = smaByPeriod.get(longPeriod)!;
+      for (let i = 1; i < candles.length; i++) {
+        const s0 = short[i - 1];
+        const s1 = short[i];
+        const l0 = long[i - 1];
+        const l1 = long[i];
+        if (s0 == null || s1 == null || l0 == null || l1 == null) continue;
+        const prevDiff = s0 - l0;
+        const curDiff = s1 - l1;
+        if (prevDiff === 0 || Math.sign(prevDiff) === Math.sign(curDiff)) continue;
+        const golden = curDiff > 0;
+        const kind = golden ? "golden-cross" : "dead-cross";
+        out.push({
+          type: `${kind}-${shortPeriod}-${longPeriod}`,
+          category: "cross",
+          confidence: 1,
+          range: { start: candles[i - 1].date, end: candles[i].date },
+          keyPoints: [
+            { date: candles[i - 1].date, price: s0, kind },
+            { date: candles[i].date, price: s1, kind },
+          ],
+          note: `${shortPeriod}일선이 ${longPeriod}일선을 ${golden ? "상향" : "하향"} 돌파`,
+        });
+      }
+    }
   }
   return out;
 }

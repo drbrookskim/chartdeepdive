@@ -62,12 +62,18 @@ const PATTERN_LABELS: Record<string, string> = {
   "diamond-bottom": "다이아몬드바닥",
   "island-reversal": "섬반전",
   "cup-and-handle": "컵앤핸들",
-  "golden-cross": "골든크로스",
-  "dead-cross": "데드크로스",
 };
 
+/** golden-cross-5-10 / dead-cross-20-60 -> "5·10 골든크로스" (dynamic MA pair). */
+function crossLabel(type: string): string | null {
+  const m = type.match(/^(golden|dead)-cross-(\d+)-(\d+)$/);
+  if (!m) return null;
+  const [, kind, shortPeriod, longPeriod] = m;
+  return `${shortPeriod}·${longPeriod} ${kind === "golden" ? "골든크로스" : "데드크로스"}`;
+}
+
 export function patternLabel(type: string): string {
-  return PATTERN_LABELS[type] ?? type;
+  return PATTERN_LABELS[type] ?? crossLabel(type) ?? type;
 }
 
 const CATEGORY_LABELS: Record<string, string> = {
