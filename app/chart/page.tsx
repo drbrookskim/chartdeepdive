@@ -275,11 +275,11 @@ function ChartInner() {
               {summary.up ? "▲" : "▼"} {formatSigned(summary.pct)}% (
               {formatSigned(summary.delta, currency === "KRW" ? 0 : 2)})
             </span>
+            <button className="signalbtn" onClick={() => setShowSignals((s) => !s)}>
+              신호요약 →
+            </button>
           </>
         )}
-        <button className="signalbtn" onClick={() => setShowSignals((s) => !s)}>
-          신호요약 →
-        </button>
         {showSignals && (
           <SignalPopover
             analysis={analysis}
