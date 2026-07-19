@@ -143,8 +143,11 @@ export function inflectionPoints(candles: Candle[]): InflectionResult {
   return {
     points,
     note:
-      "rule-based only (volume anomaly, RSI divergence, OBV divergence, BB squeeze); " +
-      "the ML(50%) and news(15%) legs of the original ensemble are not implemented — " +
-      "points mark past pivots where >=2 rules corroborated the turn, not a live forecast",
+      "규칙 기반만 적용됨(거래량이상·RSI다이버전스·OBV다이버전스·BB스퀴즈). " +
+      "원 앙상블의 ML(50%)·뉴스(15%) 레그는 미구현 — 과거 전환점에서 규칙이 " +
+      "2개 이상 부합한 지점만 표시하며, 실시간 예측이 아님. " +
+      "confidence는 확률이 아니라 규칙별 고정 가중치 합산 점수(거래량이상 " +
+      "0.25 · RSI다이버전스 0.3 · OBV다이버전스 0.25 · BB스퀴즈 0.2, 최대 1.0)로, " +
+      "0.5~0.55대가 가장 흔함(2개 규칙만 부합하는 경우가 가장 자주 발생)",
   };
 }

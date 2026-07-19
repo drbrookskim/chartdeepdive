@@ -408,18 +408,24 @@ export default function ChartStack({
     // The arrow glyph is center-anchored (translate(-50%,-50%), ~22px font),
     // so a keyPoint right at/after the plot's right edge would have it
     // straddle the axis gutter and get eaten by patternarrows' overflow:
-    // hidden — clamp so it always stays fully inside the plot instead of
-    // vanishing there.
+    // hidden — clamp SMALL overshoots so it stays fully inside the plot
+    // instead of vanishing there. But timeToCoordinate extrapolates linearly
+    // for times far outside the current pan window (never returns null just
+    // for being off-screen) — clamping those too pinned them to the edge
+    // permanently instead of letting them scroll out of view, which is what
+    // stacked a pile of arrows in the top-right corner. Anything more than a
+    // hair past either edge is hidden instead.
     const plotWidth =
       (mainRef.current?.clientWidth ?? 0) - Math.max(main.priceScale("right").width(), AXIS_WIDTH_FALLBACK);
     const ARROW_HALF = 12;
+    const EDGE_OVERSHOOT = 40;
     for (const el of patternArrowsRef.current.values()) {
       const t = el.dataset.time;
       const p = el.dataset.price;
       if (!t || !p) continue;
       const rawX = main.timeScale().timeToCoordinate(t as Time);
       const y = series.priceToCoordinate(Number(p));
-      if (rawX == null || y == null) {
+      if (rawX == null || y == null || rawX < -EDGE_OVERSHOOT || rawX > plotWidth + EDGE_OVERSHOOT) {
         el.style.display = "none";
         continue;
       }
@@ -434,7 +440,7 @@ export default function ChartStack({
       if (!t || !p) continue;
       const rawX = main.timeScale().timeToCoordinate(t as Time);
       const y = series.priceToCoordinate(Number(p));
-      if (rawX == null || y == null) {
+      if (rawX == null || y == null || rawX < -EDGE_OVERSHOOT || rawX > plotWidth + EDGE_OVERSHOOT) {
         el.style.display = "none";
         continue;
       }
