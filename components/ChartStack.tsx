@@ -355,11 +355,13 @@ export default function ChartStack({
   const patternHarmonicRef = useRef<Set<string>>(new Set());
   const patternArrowsRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const elliottPointsRef = useRef<Map<string, HTMLDivElement>>(new Map());
-  // Balloon popup for a clicked inflection-point arrow: the popup DOM node
-  // (created lazily, reused), which arrow key it's currently anchored to
-  // (null = closed), and the arrow's own dataset for repositioning.
-  const inflectionPopupRef = useRef<HTMLDivElement | null>(null);
-  const openInflectionKeyRef = useRef<string | null>(null);
+  const ichimokuInfoRef = useRef<Map<string, HTMLDivElement>>(new Map());
+  // Balloon popup shared by every clickable chart annotation (inflection
+  // arrows, elliott wave-point badges, the ichimoku info badge): the popup
+  // DOM node (created lazily, reused), and which annotation key it's
+  // currently anchored to (null = closed).
+  const detailPopupRef = useRef<HTMLDivElement | null>(null);
+  const openDetailKeyRef = useRef<string | null>(null);
   const staticMarkersRef = useRef<SeriesMarker<Time>[]>([]);
   // Mobile only (see .subtab-bar CSS breakpoint): RSI/MACD share screen space
   // via tabs instead of stacking, so only one sub-chart needs real width at a
@@ -410,45 +412,95 @@ export default function ChartStack({
     preservedRangeRef.current = null;
   }, [symbol, market]);
 
-  const closeInflectionPopup = useCallback(() => {
-    openInflectionKeyRef.current = null;
-    if (inflectionPopupRef.current) inflectionPopupRef.current.style.display = "none";
+  const closeDetailPopup = useCallback(() => {
+    openDetailKeyRef.current = null;
+    if (detailPopupRef.current) detailPopupRef.current.style.display = "none";
   }, []);
 
-  // Opens (or, on a second click of the same arrow, closes) the detail
-  // balloon for one inflection point, positioned just above the arrow that
-  // was clicked — confidence isn't self-explanatory (see the note in
-  // lib/analysis/inflection.ts), so this is how a user gets the "why"
-  // instead of just the bare "변곡 0.55" chart label.
-  const openInflectionPopup = useCallback(
-    (key: string, p: InflectionPoint, arrowEl: HTMLDivElement) => {
-      if (openInflectionKeyRef.current === key) {
-        closeInflectionPopup();
+  // Opens (or, on a second click of the same annotation, closes) the shared
+  // detail balloon, positioned just above whichever element was clicked.
+  // Generic over content — each caller (inflection arrow, elliott wave
+  // badge, ichimoku info badge) builds its own innerHTML and passes it in,
+  // since none of confidence/rule-checks/signal-composition are
+  // self-explanatory from the bare chart glyph alone.
+  const openDetailPopup = useCallback(
+    (key: string, html: string, anchorEl: HTMLDivElement) => {
+      if (openDetailKeyRef.current === key) {
+        closeDetailPopup();
         return;
       }
       const container = arrowsContainerRef.current;
       if (!container) return;
-      let popup = inflectionPopupRef.current;
+      let popup = detailPopupRef.current;
       if (!popup) {
         popup = document.createElement("div");
-        popup.className = "inflectionpopup";
+        popup.className = "chartballoon";
         container.appendChild(popup);
-        inflectionPopupRef.current = popup;
+        detailPopupRef.current = popup;
       }
+      popup.innerHTML = html;
+      openDetailKeyRef.current = key;
+      popup.style.display = "block";
+      popup.style.left = anchorEl.style.left;
+      popup.style.top = `${parseFloat(anchorEl.style.top) - 14}px`;
+    },
+    [closeDetailPopup],
+  );
+
+  const openInflectionPopup = useCallback(
+    (key: string, p: InflectionPoint, arrowEl: HTMLDivElement) => {
       const rulesHtml = p.signals
         .map((s) => `<li><b>${inflectionRuleLabel(s.rule)}</b> — ${s.detail}</li>`)
         .join("");
-      popup.innerHTML =
-        `<div class="inflectionpopup__head">${p.date} · ${p.direction === "up" ? "상승 전환" : "하락 전환"} · confidence ${p.confidence.toFixed(2)}</div>` +
-        `<div class="inflectionpopup__price">${formatPrice(p.price, currency)}</div>` +
-        `<ul class="inflectionpopup__rules">${rulesHtml}</ul>` +
-        `<div class="inflectionpopup__foot">규칙 기반 가중치 합산 점수(확률 아님) — ${p.signals.length}개 규칙 부합</div>`;
-      openInflectionKeyRef.current = key;
-      popup.style.display = "block";
-      popup.style.left = arrowEl.style.left;
-      popup.style.top = `${parseFloat(arrowEl.style.top) - 14}px`;
+      const html =
+        `<div class="chartballoon__head">${p.date} · ${p.direction === "up" ? "상승 전환" : "하락 전환"} · confidence ${p.confidence.toFixed(2)}</div>` +
+        `<div class="chartballoon__sub">${formatPrice(p.price, currency)}</div>` +
+        `<ul class="chartballoon__rules">${rulesHtml}</ul>` +
+        `<div class="chartballoon__foot">규칙 기반 가중치 합산 점수(확률 아님) — ${p.signals.length}개 규칙 부합</div>`;
+      openDetailPopup(key, html, arrowEl);
     },
-    [closeInflectionPopup, currency],
+    [openDetailPopup, currency],
+  );
+
+  // Elliott's checks apply to the whole 5-wave count, not to any one point —
+  // every wave badge opens the same explanation (which rule passed/failed
+  // and why the count is/isn't a valid impulse).
+  const openElliottPopup = useCallback(
+    (impulse: NonNullable<AnalysisResult["advanced"]["elliottWave"]>["impulse"], badgeEl: HTMLDivElement) => {
+      if (!impulse) return;
+      const { checks, direction, completed } = impulse;
+      const ruleRow = (pass: boolean, label: string) =>
+        `<li class="${pass ? "pass" : "fail"}">${pass ? "✓" : "✗"} ${label}</li>`;
+      const html =
+        `<div class="chartballoon__head">${direction === "up" ? "상승" : "하락"} 임펄스 · ${completed ? "5파 완성" : "진행 중"}</div>` +
+        `<ul class="chartballoon__rules">` +
+        ruleRow(checks.wave2Retrace, "파동2가 파동1 시작점을 되돌리지 않음") +
+        ruleRow(checks.wave3NotShortest, "파동3이 1·3·5파 중 최단파가 아님") +
+        ruleRow(checks.wave4NoOverlap, "파동4가 파동1 가격대를 침범하지 않음") +
+        `</ul>` +
+        `<div class="chartballoon__foot">3대 규칙(iron rules) 전부 충족한 가장 최근 구간 — 규칙 기반 판정, 확률 아님</div>`;
+      openDetailPopup("elliott-info", html, badgeEl);
+    },
+    [openDetailPopup],
+  );
+
+  const openIchimokuPopup = useCallback(
+    (ich: NonNullable<AnalysisResult["advanced"]["ichimoku"]>, badgeEl: HTMLDivElement) => {
+      const c = ich.checks;
+      const signalLabel = ich.signal === 1 ? "강세(매수)" : ich.signal === -1 ? "약세(매도)" : "중립(관망)";
+      const html =
+        `<div class="chartballoon__head">일목균형표 신호: ${signalLabel}</div>` +
+        (c
+          ? `<ul class="chartballoon__rules">` +
+            `<li>전환선×기준선: ${c.tkCross === "bull" ? "골든크로스" : c.tkCross === "bear" ? "데드크로스" : "교차 없음"}</li>` +
+            `<li>가격 위치: 구름 ${c.priceVsCloud === "above" ? "위" : c.priceVsCloud === "below" ? "아래" : "안(중립)"}</li>` +
+            `<li>구름 색: ${c.cloudColor === "bullish" ? "양운(선행스팬A>B)" : "음운(선행스팬A<B)"}</li>` +
+            `</ul>` +
+            `<div class="chartballoon__foot">3조건(TK크로스+구름 돌파+구름 방향) 전부 부합해야 강세/약세, 아니면 중립</div>`
+          : `<div class="chartballoon__foot">최근 구간 데이터 부족으로 판정 불가</div>`);
+      openDetailPopup("ichimoku-info", html, badgeEl);
+    },
+    [openDetailPopup],
   );
 
   // Repositions every persistent pattern arrow to match the main pane's
@@ -473,6 +525,13 @@ export default function ChartStack({
       (mainRef.current?.clientWidth ?? 0) - Math.max(main.priceScale("right").width(), AXIS_WIDTH_FALLBACK);
     const ARROW_HALF = 12;
     const EDGE_OVERSHOOT = 40;
+    const repositionPopupIfOpen = (key: string, x: number, top: number) => {
+      if (openDetailKeyRef.current !== key || !detailPopupRef.current) return;
+      const popup = detailPopupRef.current;
+      popup.style.display = "block";
+      popup.style.left = `${Math.min(Math.max(x, 90), plotWidth - 90)}px`;
+      popup.style.top = `${top - 14}px`;
+    };
     for (const [key, el] of patternArrowsRef.current) {
       const t = el.dataset.time;
       const p = el.dataset.price;
@@ -481,7 +540,7 @@ export default function ChartStack({
       const y = series.priceToCoordinate(Number(p));
       if (rawX == null || y == null || rawX < -EDGE_OVERSHOOT || rawX > plotWidth + EDGE_OVERSHOOT) {
         el.style.display = "none";
-        if (openInflectionKeyRef.current === key) closeInflectionPopup();
+        if (openDetailKeyRef.current === key) closeDetailPopup();
         continue;
       }
       const x = Math.min(rawX, plotWidth - ARROW_HALF);
@@ -489,14 +548,9 @@ export default function ChartStack({
       el.style.display = "block";
       el.style.left = `${x}px`;
       el.style.top = `${arrowTop}px`;
-      if (openInflectionKeyRef.current === key && inflectionPopupRef.current) {
-        const popup = inflectionPopupRef.current;
-        popup.style.display = "block";
-        popup.style.left = `${Math.min(Math.max(x, 90), plotWidth - 90)}px`;
-        popup.style.top = `${arrowTop - 14}px`;
-      }
+      repositionPopupIfOpen(key, x, arrowTop);
     }
-    for (const el of elliottPointsRef.current.values()) {
+    for (const [key, el] of elliottPointsRef.current) {
       const t = el.dataset.time;
       const p = el.dataset.price;
       if (!t || !p) continue;
@@ -504,13 +558,35 @@ export default function ChartStack({
       const y = series.priceToCoordinate(Number(p));
       if (rawX == null || y == null || rawX < -EDGE_OVERSHOOT || rawX > plotWidth + EDGE_OVERSHOOT) {
         el.style.display = "none";
+        if (openDetailKeyRef.current === key) closeDetailPopup();
         continue;
       }
+      const x = Math.min(rawX, plotWidth - ARROW_HALF);
+      const top = y - 16;
       el.style.display = "flex";
-      el.style.left = `${Math.min(rawX, plotWidth - ARROW_HALF)}px`;
-      el.style.top = `${y - 16}px`;
+      el.style.left = `${x}px`;
+      el.style.top = `${top}px`;
+      repositionPopupIfOpen(key, x, top);
     }
-  }, [closeInflectionPopup]);
+    for (const [key, el] of ichimokuInfoRef.current) {
+      const t = el.dataset.time;
+      const p = el.dataset.price;
+      if (!t || !p) continue;
+      const rawX = main.timeScale().timeToCoordinate(t as Time);
+      const y = series.priceToCoordinate(Number(p));
+      if (rawX == null || y == null || rawX < -EDGE_OVERSHOOT || rawX > plotWidth + EDGE_OVERSHOOT) {
+        el.style.display = "none";
+        if (openDetailKeyRef.current === key) closeDetailPopup();
+        continue;
+      }
+      const x = Math.min(rawX, plotWidth - ARROW_HALF);
+      const top = y - 16;
+      el.style.display = "flex";
+      el.style.left = `${x}px`;
+      el.style.top = `${top}px`;
+      repositionPopupIfOpen(key, x, top);
+    }
+  }, [closeDetailPopup]);
 
   // Recomputes every pattern shape-line's pixel path to match the main
   // pane's current time/price scale — called after drawPatternShapes and on
@@ -1387,11 +1463,13 @@ export default function ChartStack({
     patternArrowsRef.current = new Map();
     for (const el of elliottPointsRef.current.values()) el.remove();
     elliottPointsRef.current = new Map();
-    // The rebuild below recreates every inflection arrow with fresh keys —
-    // an open popup anchored to the old key would otherwise be stranded
-    // (never repositioned, never closed) since the map that drives it was
-    // just reset.
-    closeInflectionPopup();
+    for (const el of ichimokuInfoRef.current.values()) el.remove();
+    ichimokuInfoRef.current = new Map();
+    // The rebuild below recreates every clickable annotation with fresh
+    // keys — an open popup anchored to an old key would otherwise be
+    // stranded (never repositioned, never closed) since the map that
+    // drives it was just reset.
+    closeDetailPopup();
     drawPatternShapes(selectedPatterns);
 
     // Same bouncing neon-outlined arrows checked patterns get (see
@@ -1400,13 +1478,18 @@ export default function ChartStack({
     // unrelated layer toggles); adding these earlier just had them deleted
     // a few lines later.
     if (layers.elliott && analysis?.advanced.elliottWave?.impulse && arrowsContainerRef.current) {
-      const waves = analysis.advanced.elliottWave.impulse.waves;
+      const impulse = analysis.advanced.elliottWave.impulse;
+      const waves = impulse.waves;
       waves.forEach((w, i) => {
         const el = document.createElement("div");
         el.className = "elliottpoint";
         el.textContent = w.label;
         el.dataset.time = w.date;
         el.dataset.price = String(w.price);
+        el.addEventListener("click", (e) => {
+          e.stopPropagation();
+          openElliottPopup(impulse, el);
+        });
         arrowsContainerRef.current!.appendChild(el);
         elliottPointsRef.current.set(`elliott-pt-${i}`, el);
       });
@@ -1427,6 +1510,28 @@ export default function ChartStack({
         el.dataset.dir = isLow ? "up" : "down";
         arrowsContainerRef.current.appendChild(el);
         patternArrowsRef.current.set("elliott-wave", el);
+      }
+    }
+    // Ichimoku has no discrete points like elliott/inflection — one "ⓘ"
+    // badge at the latest bar's kijun value is the click target for the
+    // signal breakdown (TK cross / cloud position / cloud color).
+    if (layers.ichimoku && analysis?.advanced.ichimoku && arrowsContainerRef.current) {
+      const ich = analysis.advanced.ichimoku;
+      const lastIdx = candles.length - 1;
+      const anchorDate = dates[lastIdx];
+      const anchorPrice = ich.kijun[lastIdx] ?? ich.tenkan[lastIdx] ?? candles[lastIdx]?.close;
+      if (lastIdx >= 0 && anchorDate != null && anchorPrice != null) {
+        const el = document.createElement("div");
+        el.className = "ichimokuinfo";
+        el.textContent = "ⓘ";
+        el.dataset.time = anchorDate;
+        el.dataset.price = String(anchorPrice);
+        el.addEventListener("click", (e) => {
+          e.stopPropagation();
+          openIchimokuPopup(ich, el);
+        });
+        arrowsContainerRef.current.appendChild(el);
+        ichimokuInfoRef.current.set("ichimoku-info", el);
       }
     }
     if (layers.inflection && analysis?.advanced.inflectionPoints && arrowsContainerRef.current) {
@@ -2067,19 +2172,19 @@ export default function ChartStack({
     return () => cancelAnimationFrame(raf);
   }, [focusPattern, candles, repositionArrows, drawPatternLinePositions]);
 
-  // Closes the inflection-point popup on any click outside it — arrow clicks
-  // themselves stopPropagation (see openInflectionPopup's callers) so they
-  // never reach this listener, only clicks elsewhere on the page do.
+  // Closes the shared detail popup on any click outside it — annotation
+  // clicks themselves stopPropagation (see openDetailPopup's callers) so
+  // they never reach this listener, only clicks elsewhere on the page do.
   useEffect(() => {
     function onDocClick(e: MouseEvent) {
-      const popup = inflectionPopupRef.current;
+      const popup = detailPopupRef.current;
       if (popup && popup.style.display !== "none" && !popup.contains(e.target as Node)) {
-        closeInflectionPopup();
+        closeDetailPopup();
       }
     }
     document.addEventListener("click", onDocClick);
     return () => document.removeEventListener("click", onDocClick);
-  }, [closeInflectionPopup]);
+  }, [closeDetailPopup]);
 
   // Drag a handle below a pane to resize it; live via applyOptions (see the
   // *HeightRef/*ApiRef pairs above) so no chart rebuild happens per pixel.

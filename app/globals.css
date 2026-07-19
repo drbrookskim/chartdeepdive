@@ -924,10 +924,11 @@ button {
   cursor: pointer;
 }
 
-/* detail balloon for a clicked inflection arrow (see openInflectionPopup /
-   .inflectionarrow in ChartStack.tsx) — anchored just above the arrow,
-   bottom-anchored so it grows upward instead of covering the arrow itself */
-.inflectionpopup {
+/* detail balloon shared by every clickable chart annotation (inflection
+   arrows, elliott wave badges, the ichimoku info badge — see
+   openDetailPopup in ChartStack.tsx), anchored just above whichever one was
+   clicked, bottom-anchored so it grows upward instead of covering it */
+.chartballoon {
   display: none;
   position: absolute;
   transform: translate(-50%, -100%);
@@ -942,7 +943,7 @@ button {
   pointer-events: auto;
   z-index: 6;
 }
-.inflectionpopup::after {
+.chartballoon::after {
   content: "";
   position: absolute;
   left: 50%;
@@ -954,23 +955,30 @@ button {
   border-bottom: 1px solid var(--border);
   transform: translateX(-50%) rotate(45deg);
 }
-.inflectionpopup__head {
+.chartballoon__head {
   font-weight: 700;
   margin-bottom: 4px;
 }
-.inflectionpopup__price {
+.chartballoon__sub {
   color: var(--text-muted);
   margin-bottom: 6px;
 }
-.inflectionpopup__rules {
+.chartballoon__rules {
   margin: 0 0 6px;
   padding-left: 16px;
+  list-style: none;
 }
-.inflectionpopup__rules li {
+.chartballoon__rules li {
   margin-bottom: 3px;
   line-height: 1.4;
 }
-.inflectionpopup__foot {
+.chartballoon__rules li.pass {
+  color: var(--up);
+}
+.chartballoon__rules li.fail {
+  color: var(--down);
+}
+.chartballoon__foot {
   color: var(--text-faint);
   font-size: 11px;
   line-height: 1.4;
@@ -979,7 +987,8 @@ button {
 /* elliott wave-point badge: neon fill, black border + number (a native
    SeriesMarker can't split shape-color from text-color, so this is a plain
    HTML overlay positioned the same way as .patternpulse, see
-   elliottPointsRef/repositionArrows in ChartStack.tsx) */
+   elliottPointsRef/repositionArrows in ChartStack.tsx). Clickable — every
+   badge opens the same whole-count rule breakdown. */
 .elliottpoint {
   position: absolute;
   display: flex;
@@ -994,7 +1003,30 @@ button {
   font-size: 10px;
   font-weight: 700;
   line-height: 1;
-  pointer-events: none;
+  pointer-events: auto;
+  cursor: pointer;
+  transform: translate(-50%, -50%);
+}
+
+/* single clickable "why" badge for the ichimoku signal (see
+   openIchimokuPopup/ichimokuInfoRef in ChartStack.tsx) — ichimoku has no
+   discrete points like elliott/inflection, so this is the one click target */
+.ichimokuinfo {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 2px solid var(--neon);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  pointer-events: auto;
+  cursor: pointer;
   transform: translate(-50%, -50%);
 }
 @keyframes patternpulse-bob {

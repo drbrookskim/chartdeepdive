@@ -26,6 +26,12 @@ export interface IchimokuResult {
   projectedDates: string[];
   /** 1 = strong buy, -1 = strong sell, 0 = stand aside, at the last candle. */
   signal: 1 | -1 | 0;
+  /** Signal's 3 components at the last candle, for transparency (null during warm-up). */
+  checks: {
+    tkCross: "bull" | "bear" | "none";
+    priceVsCloud: "above" | "below" | "inside";
+    cloudColor: "bullish" | "bearish";
+  } | null;
 }
 
 const round = (v: number, dp = 4): number => {
@@ -96,6 +102,7 @@ export function ichimoku(
 
   // Signal at the last candle: TK cross + cloud position + cloud color.
   let signal: 1 | -1 | 0 = 0;
+  let checks: IchimokuResult["checks"] = null;
   if (n >= 2) {
     const i = n - 1;
     const tPrev = tenkan[i - 1];
@@ -116,6 +123,11 @@ export function ichimoku(
       const cloudBot = Math.min(spanA, spanB);
       if (bullCross && price > cloudTop && spanA > spanB) signal = 1;
       else if (bearCross && price < cloudBot && spanA < spanB) signal = -1;
+      checks = {
+        tkCross: bullCross ? "bull" : bearCross ? "bear" : "none",
+        priceVsCloud: price > cloudTop ? "above" : price < cloudBot ? "below" : "inside",
+        cloudColor: spanA >= spanB ? "bullish" : "bearish",
+      };
     }
   }
 
@@ -131,5 +143,6 @@ export function ichimoku(
     leadingSpanB,
     projectedDates,
     signal,
+    checks,
   };
 }
