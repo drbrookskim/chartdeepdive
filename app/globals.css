@@ -227,6 +227,7 @@ button {
   background: var(--surface);
   color: var(--text);
   cursor: pointer;
+  margin-top: 28px;
 }
 .googlesignin:hover {
   background: var(--accent-soft);
