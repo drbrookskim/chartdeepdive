@@ -19,15 +19,18 @@ export default function SearchPage() {
   const [recent, setRecent] = useState<SearchResult[]>([]);
   const [expanded, setExpanded] = useState(false);
 
+  // Recent search history is a signed-in perk — an anonymous visitor's
+  // localStorage might still have entries from a prior logged-in session on
+  // this browser, so gate on `session` rather than just skipping the fetch.
   useEffect(() => {
-    setRecent(getRecent());
-  }, []);
+    if (session) setRecent(getRecent());
+  }, [session]);
 
   const RECENT_COLLAPSED = 6;
   const visibleRecent = expanded ? recent : recent.slice(0, RECENT_COLLAPSED);
 
   function select(r: SearchResult) {
-    pushRecent(r);
+    if (session) pushRecent(r);
     const qs = new URLSearchParams({
       symbol: r.symbol,
       market: r.market,
@@ -75,47 +78,45 @@ export default function SearchPage() {
       <main className="searchhero">
         <h1>Dive into the Chart</h1>
 
-        {status === "loading" ? null : session ? (
-          <>
-            <SearchBox onSelect={select} markets={markets} autoFocus />
+        <SearchBox onSelect={select} markets={markets} autoFocus />
 
-            {recent.length > 0 && (
-              <div className="recent">
-                <div className="recent__label">최근 검색</div>
-                <div className="recent__chips">
-                  {visibleRecent.map((r) => (
-                    <div key={r.symbol} className="chipholder">
-                      <button className="chip" data-initial={r.name.slice(0, 1)} onClick={() => select(r)}>
-                        <strong>{r.name}</strong>
-                        <small>{r.symbol}</small>
-                      </button>
-                      <button
-                        className="chipremove"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setRecent(removeRecent(r.symbol));
-                        }}
-                        aria-label={`${r.name} 최근 검색에서 삭제`}
-                        title="삭제"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
-                  {recent.length > RECENT_COLLAPSED && (
-                    <button
-                      className="chip chip--toggle"
-                      onClick={() => setExpanded((v) => !v)}
-                    >
-                      <span className="chip__toggleicon" data-expanded={expanded} />
-                      <strong>{expanded ? "간략히" : "더보기"}</strong>
-                    </button>
-                  )}
+        {session && recent.length > 0 && (
+          <div className="recent">
+            <div className="recent__label">최근 검색</div>
+            <div className="recent__chips">
+              {visibleRecent.map((r) => (
+                <div key={r.symbol} className="chipholder">
+                  <button className="chip" data-initial={r.name.slice(0, 1)} onClick={() => select(r)}>
+                    <strong>{r.name}</strong>
+                    <small>{r.symbol}</small>
+                  </button>
+                  <button
+                    className="chipremove"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setRecent(removeRecent(r.symbol));
+                    }}
+                    aria-label={`${r.name} 최근 검색에서 삭제`}
+                    title="삭제"
+                  >
+                    ×
+                  </button>
                 </div>
-              </div>
-            )}
-          </>
-        ) : (
+              ))}
+              {recent.length > RECENT_COLLAPSED && (
+                <button
+                  className="chip chip--toggle"
+                  onClick={() => setExpanded((v) => !v)}
+                >
+                  <span className="chip__toggleicon" data-expanded={expanded} />
+                  <strong>{expanded ? "간략히" : "더보기"}</strong>
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {status !== "loading" && !session && (
           <button className="googlesignin" onClick={() => signIn("google")}>
             <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
               <path

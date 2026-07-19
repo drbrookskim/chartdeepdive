@@ -2,9 +2,11 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useSession } from "next-auth/react";
 import dynamic from "next/dynamic";
 import ThemeToggle from "@/components/ThemeToggle";
 import UserChip from "@/components/UserChip";
+import AuthPromptModal from "@/components/AuthPromptModal";
 import LayerControls from "@/components/LayerControls";
 import SignalPopover from "@/components/SignalPopover";
 import SearchBox from "@/components/SearchBox";
@@ -48,6 +50,8 @@ function useThemeVersion(): number {
 
 function ChartInner() {
   const router = useRouter();
+  const { data: session, status: sessionStatus } = useSession();
+  const [showAuthPrompt, setShowAuthPrompt] = useState(false);
   const params = useSearchParams();
   const symbol = params.get("symbol") ?? "";
   const market = (params.get("market") as Market) ?? "US";
@@ -88,6 +92,27 @@ function ChartInner() {
   const focusSeqRef = useRef(0);
   const [showSignals, setShowSignals] = useState(false);
   const [sheetCollapsed, setSheetCollapsed] = useState(true);
+
+  // Anonymous users only get the free MA-only chart — every other layer
+  // (and patterns) requires signing in, prompted via toggleLayer/
+  // togglePatterns below. Force those defaults off once we know for sure
+  // there's no session (not just still loading).
+  useEffect(() => {
+    if (sessionStatus === "loading" || session) return;
+    setLayers((prev) => ({
+      ...prev,
+      ema: false,
+      bollinger: false,
+      volume: false,
+      volumeProfile: false,
+      rsi: false,
+      macd: false,
+      ichimoku: false,
+      elliott: false,
+      inflection: false,
+    }));
+    setShowPatterns(false);
+  }, [session, sessionStatus]);
   const [researching, setResearching] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [markets, setMarkets] = useState<{ KR: boolean; US: boolean }>({
@@ -220,9 +245,17 @@ function ChartInner() {
   }, [ohlcv]);
 
   function toggleLayer(key: keyof LayerState) {
+    if (!session && key !== "ma") {
+      setShowAuthPrompt(true);
+      return;
+    }
     setLayers((prev) => ({ ...prev, [key]: !prev[key] }));
   }
   function togglePatterns() {
+    if (!session) {
+      setShowAuthPrompt(true);
+      return;
+    }
     setShowPatterns((s) => !s);
   }
   function togglePatternKey(key: string) {
@@ -392,6 +425,7 @@ function ChartInner() {
       ) : (
         <EmptyState symbol={symbol} onBack={() => router.push("/")} />
       )}
+      <AuthPromptModal open={showAuthPrompt} onClose={() => setShowAuthPrompt(false)} />
     </>
   );
 }
