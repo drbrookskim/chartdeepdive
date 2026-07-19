@@ -4,6 +4,7 @@ import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import ThemeToggle from "@/components/ThemeToggle";
+import UserChip from "@/components/UserChip";
 import LayerControls from "@/components/LayerControls";
 import SignalPopover from "@/components/SignalPopover";
 import SearchBox from "@/components/SearchBox";
@@ -89,7 +90,20 @@ function ChartInner() {
   const [sheetCollapsed, setSheetCollapsed] = useState(true);
   const [researching, setResearching] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  const [markets, setMarkets] = useState<{ KR: boolean; US: boolean }>({
+    KR: true,
+    US: true,
+  });
   const themeVersion = useThemeVersion();
+
+  function toggleMarket(m: Market) {
+    setMarkets((prev) => {
+      // Never allow both off — that would hide every result silently.
+      const next = { ...prev, [m]: !prev[m] };
+      if (!next.KR && !next.US) return prev;
+      return next;
+    });
+  }
 
   // Persist to recent searches on first successful load.
   useEffect(() => {
@@ -256,6 +270,7 @@ function ChartInner() {
             <SearchBox
               onSelect={selectSearch}
               placeholder={`${displayName} 대신 검색…`}
+              markets={markets}
               autoFocus
               onBlurClose={() => setResearching(false)}
             />
@@ -269,6 +284,23 @@ function ChartInner() {
             </button>
           )}
         </div>
+        <div className="marketchip" role="group" aria-label="시장 필터">
+          <button
+            className={markets.KR ? "on" : ""}
+            onClick={() => toggleMarket("KR")}
+            aria-pressed={markets.KR}
+          >
+            KR
+          </button>
+          <button
+            className={markets.US ? "on" : ""}
+            onClick={() => toggleMarket("US")}
+            aria-pressed={markets.US}
+          >
+            US
+          </button>
+        </div>
+        <UserChip />
         <ThemeToggle />
       </header>
 

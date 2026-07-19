@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useSession, signIn, signOut } from "next-auth/react";
+import { useSession, signIn } from "next-auth/react";
 import ThemeToggle from "@/components/ThemeToggle";
+import UserChip from "@/components/UserChip";
 import SearchBox from "@/components/SearchBox";
 import type { SearchResult, Market } from "@/lib/api";
 import { getRecent, pushRecent, removeRecent } from "@/lib/recent";
@@ -66,16 +67,7 @@ export default function SearchPage() {
               US
             </button>
           </div>
-          {session && (
-            <button className="useridchip" onClick={() => signOut()} title="로그아웃">
-              {session.user?.image ? (
-                <img src={session.user.image} alt="" referrerPolicy="no-referrer" />
-              ) : (
-                <span className="useridchip__fallback">{session.user?.name?.slice(0, 1)}</span>
-              )}
-              {session.user?.name}
-            </button>
-          )}
+          <UserChip />
           <ThemeToggle />
         </div>
       </header>
