@@ -21,7 +21,15 @@ import {
 } from "lightweight-charts";
 import { fetchOhlcv, type OhlcvResponse, type AnalysisResult, type Market } from "@/lib/api";
 import type { Pattern } from "@/lib/analysis/patterns";
-import { categoryColorVar, formatAxisPrice, formatPrice, formatSigned, patternKindLabel } from "@/lib/format";
+import type { InflectionPoint } from "@/lib/analysis/inflection";
+import {
+  categoryColorVar,
+  formatAxisPrice,
+  formatPrice,
+  formatSigned,
+  inflectionRuleLabel,
+  patternKindLabel,
+} from "@/lib/format";
 
 /** Neon accent for pattern shape-lines / the location-ping arrow outline —
  * deliberately theme-independent so it always pops against candles. */
@@ -347,6 +355,11 @@ export default function ChartStack({
   const patternHarmonicRef = useRef<Set<string>>(new Set());
   const patternArrowsRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const elliottPointsRef = useRef<Map<string, HTMLDivElement>>(new Map());
+  // Balloon popup for a clicked inflection-point arrow: the popup DOM node
+  // (created lazily, reused), which arrow key it's currently anchored to
+  // (null = closed), and the arrow's own dataset for repositioning.
+  const inflectionPopupRef = useRef<HTMLDivElement | null>(null);
+  const openInflectionKeyRef = useRef<string | null>(null);
   const staticMarkersRef = useRef<SeriesMarker<Time>[]>([]);
   // Mobile only (see .subtab-bar CSS breakpoint): RSI/MACD share screen space
   // via tabs instead of stacking, so only one sub-chart needs real width at a
@@ -397,6 +410,47 @@ export default function ChartStack({
     preservedRangeRef.current = null;
   }, [symbol, market]);
 
+  const closeInflectionPopup = useCallback(() => {
+    openInflectionKeyRef.current = null;
+    if (inflectionPopupRef.current) inflectionPopupRef.current.style.display = "none";
+  }, []);
+
+  // Opens (or, on a second click of the same arrow, closes) the detail
+  // balloon for one inflection point, positioned just above the arrow that
+  // was clicked — confidence isn't self-explanatory (see the note in
+  // lib/analysis/inflection.ts), so this is how a user gets the "why"
+  // instead of just the bare "변곡 0.55" chart label.
+  const openInflectionPopup = useCallback(
+    (key: string, p: InflectionPoint, arrowEl: HTMLDivElement) => {
+      if (openInflectionKeyRef.current === key) {
+        closeInflectionPopup();
+        return;
+      }
+      const container = arrowsContainerRef.current;
+      if (!container) return;
+      let popup = inflectionPopupRef.current;
+      if (!popup) {
+        popup = document.createElement("div");
+        popup.className = "inflectionpopup";
+        container.appendChild(popup);
+        inflectionPopupRef.current = popup;
+      }
+      const rulesHtml = p.signals
+        .map((s) => `<li><b>${inflectionRuleLabel(s.rule)}</b> — ${s.detail}</li>`)
+        .join("");
+      popup.innerHTML =
+        `<div class="inflectionpopup__head">${p.date} · ${p.direction === "up" ? "상승 전환" : "하락 전환"} · confidence ${p.confidence.toFixed(2)}</div>` +
+        `<div class="inflectionpopup__price">${formatPrice(p.price, currency)}</div>` +
+        `<ul class="inflectionpopup__rules">${rulesHtml}</ul>` +
+        `<div class="inflectionpopup__foot">규칙 기반 가중치 합산 점수(확률 아님) — ${p.signals.length}개 규칙 부합</div>`;
+      openInflectionKeyRef.current = key;
+      popup.style.display = "block";
+      popup.style.left = arrowEl.style.left;
+      popup.style.top = `${parseFloat(arrowEl.style.top) - 14}px`;
+    },
+    [closeInflectionPopup, currency],
+  );
+
   // Repositions every persistent pattern arrow to match the main pane's
   // current time/price scale — called after drawPatternShapes and on every
   // pan/zoom/resize of the main chart (arrows are plain DOM, not part of the
@@ -419,7 +473,7 @@ export default function ChartStack({
       (mainRef.current?.clientWidth ?? 0) - Math.max(main.priceScale("right").width(), AXIS_WIDTH_FALLBACK);
     const ARROW_HALF = 12;
     const EDGE_OVERSHOOT = 40;
-    for (const el of patternArrowsRef.current.values()) {
+    for (const [key, el] of patternArrowsRef.current) {
       const t = el.dataset.time;
       const p = el.dataset.price;
       if (!t || !p) continue;
@@ -427,12 +481,20 @@ export default function ChartStack({
       const y = series.priceToCoordinate(Number(p));
       if (rawX == null || y == null || rawX < -EDGE_OVERSHOOT || rawX > plotWidth + EDGE_OVERSHOOT) {
         el.style.display = "none";
+        if (openInflectionKeyRef.current === key) closeInflectionPopup();
         continue;
       }
       const x = Math.min(rawX, plotWidth - ARROW_HALF);
+      const arrowTop = y + (el.dataset.dir === "up" ? 16 : -16);
       el.style.display = "block";
       el.style.left = `${x}px`;
-      el.style.top = `${y + (el.dataset.dir === "up" ? 16 : -16)}px`;
+      el.style.top = `${arrowTop}px`;
+      if (openInflectionKeyRef.current === key && inflectionPopupRef.current) {
+        const popup = inflectionPopupRef.current;
+        popup.style.display = "block";
+        popup.style.left = `${Math.min(Math.max(x, 90), plotWidth - 90)}px`;
+        popup.style.top = `${arrowTop - 14}px`;
+      }
     }
     for (const el of elliottPointsRef.current.values()) {
       const t = el.dataset.time;
@@ -448,7 +510,7 @@ export default function ChartStack({
       el.style.left = `${Math.min(rawX, plotWidth - ARROW_HALF)}px`;
       el.style.top = `${y - 16}px`;
     }
-  }, []);
+  }, [closeInflectionPopup]);
 
   // Recomputes every pattern shape-line's pixel path to match the main
   // pane's current time/price scale — called after drawPatternShapes and on
@@ -1325,6 +1387,11 @@ export default function ChartStack({
     patternArrowsRef.current = new Map();
     for (const el of elliottPointsRef.current.values()) el.remove();
     elliottPointsRef.current = new Map();
+    // The rebuild below recreates every inflection arrow with fresh keys —
+    // an open popup anchored to the old key would otherwise be stranded
+    // (never repositioned, never closed) since the map that drives it was
+    // just reset.
+    closeInflectionPopup();
     drawPatternShapes(selectedPatterns);
 
     // Same bouncing neon-outlined arrows checked patterns get (see
@@ -1367,14 +1434,19 @@ export default function ChartStack({
       // language as a checked pattern, not just the small static glyph the
       // series marker above already gives it.
       analysis.advanced.inflectionPoints.points.forEach((p, i) => {
+        const key = `inflection-${i}`;
         const el = document.createElement("div");
-        el.className = `patternpulse ${p.direction === "up" ? "up" : "down"} animate`;
+        el.className = `patternpulse ${p.direction === "up" ? "up" : "down"} animate inflectionarrow`;
         el.textContent = p.direction === "up" ? "▲" : "▼";
         el.dataset.time = p.date;
         el.dataset.price = String(p.price);
         el.dataset.dir = p.direction === "up" ? "up" : "down";
+        el.addEventListener("click", (e) => {
+          e.stopPropagation();
+          openInflectionPopup(key, p, el);
+        });
         arrowsContainerRef.current!.appendChild(el);
-        patternArrowsRef.current.set(`inflection-${i}`, el);
+        patternArrowsRef.current.set(key, el);
       });
     }
     repositionArrows();
@@ -1994,6 +2066,20 @@ export default function ChartStack({
     );
     return () => cancelAnimationFrame(raf);
   }, [focusPattern, candles, repositionArrows, drawPatternLinePositions]);
+
+  // Closes the inflection-point popup on any click outside it — arrow clicks
+  // themselves stopPropagation (see openInflectionPopup's callers) so they
+  // never reach this listener, only clicks elsewhere on the page do.
+  useEffect(() => {
+    function onDocClick(e: MouseEvent) {
+      const popup = inflectionPopupRef.current;
+      if (popup && popup.style.display !== "none" && !popup.contains(e.target as Node)) {
+        closeInflectionPopup();
+      }
+    }
+    document.addEventListener("click", onDocClick);
+    return () => document.removeEventListener("click", onDocClick);
+  }, [closeInflectionPopup]);
 
   // Drag a handle below a pane to resize it; live via applyOptions (see the
   // *HeightRef/*ApiRef pairs above) so no chart rebuild happens per pixel.

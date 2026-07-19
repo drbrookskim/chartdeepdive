@@ -131,6 +131,17 @@ export function categoryColorVar(category: string): string {
   }
 }
 
+const INFLECTION_RULE_LABELS: Record<string, string> = {
+  "volume-anomaly": "거래량이상",
+  "rsi-divergence": "RSI다이버전스",
+  "obv-divergence": "OBV다이버전스",
+  "bb-squeeze": "BB스퀴즈",
+};
+
+export function inflectionRuleLabel(rule: string): string {
+  return INFLECTION_RULE_LABELS[rule] ?? rule;
+}
+
 export function signalText(signal: 1 | -1 | 0): {
   label: string;
   cls: "up" | "down" | "neutral";

@@ -99,7 +99,7 @@ export function inflectionPoints(candles: Candle[]): InflectionResult {
         score += WEIGHTS.rsiDiv;
         signals.push({
           rule: "rsi-divergence",
-          detail: `price ${priceUp ? "higher" : "lower"} vs prior ${piv.type}, RSI ${rsiUp ? "higher" : "lower"}`,
+          detail: `가격은 직전 ${piv.type === "peak" ? "고점" : "저점"} 대비 ${priceUp ? "상승" : "하락"}했으나 RSI는 ${rsiUp ? "상승" : "하락"}(다이버전스)`,
         });
       }
     }
@@ -110,20 +110,20 @@ export function inflectionPoints(candles: Candle[]): InflectionResult {
       score += WEIGHTS.obvDiv;
       signals.push({
         rule: "obv-divergence",
-        detail: `price ${priceUp ? "up" : "down"} vs prior ${piv.type}, OBV ${obvUp ? "up" : "down"}`,
+        detail: `가격은 직전 ${piv.type === "peak" ? "고점" : "저점"} 대비 ${priceUp ? "상승" : "하락"}했으나 OBV는 ${obvUp ? "상승" : "하락"}(다이버전스)`,
       });
     }
 
     if (Math.abs(volZ[i]) >= VOLUME_Z) {
       score += WEIGHTS.volume;
-      signals.push({ rule: "volume-anomaly", detail: `volume z-score ${volZ[i].toFixed(2)}` });
+      signals.push({ rule: "volume-anomaly", detail: `거래량 z-score ${volZ[i].toFixed(2)} (이상 급증)` });
     }
 
     if (squeeze.slice(Math.max(0, i - 5), i + 1).some(Boolean)) {
       score += WEIGHTS.bbSqueeze;
       signals.push({
         rule: "bb-squeeze",
-        detail: `Bollinger band width in bottom ${SQUEEZE_PERCENTILE * 100}% of trailing ${SQUEEZE_WINDOW} bars`,
+        detail: `최근 ${SQUEEZE_WINDOW}봉 중 볼린저밴드 폭이 하위 ${SQUEEZE_PERCENTILE * 100}%로 수축(스퀴즈)`,
       });
     }
 

@@ -917,6 +917,65 @@ button {
   animation: patternpulse-bob 0.9s ease-in-out infinite;
 }
 
+/* inflection arrows are clickable (detail balloon), unlike every other
+   .patternpulse use — override the container-wide pointer-events:none */
+.inflectionarrow {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+/* detail balloon for a clicked inflection arrow (see openInflectionPopup /
+   .inflectionarrow in ChartStack.tsx) — anchored just above the arrow,
+   bottom-anchored so it grows upward instead of covering the arrow itself */
+.inflectionpopup {
+  display: none;
+  position: absolute;
+  transform: translate(-50%, -100%);
+  width: 220px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 10px 12px;
+  font-size: 12px;
+  color: var(--text);
+  pointer-events: auto;
+  z-index: 6;
+}
+.inflectionpopup::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  width: 10px;
+  height: 10px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  transform: translateX(-50%) rotate(45deg);
+}
+.inflectionpopup__head {
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+.inflectionpopup__price {
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+.inflectionpopup__rules {
+  margin: 0 0 6px;
+  padding-left: 16px;
+}
+.inflectionpopup__rules li {
+  margin-bottom: 3px;
+  line-height: 1.4;
+}
+.inflectionpopup__foot {
+  color: var(--text-faint);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 /* elliott wave-point badge: neon fill, black border + number (a native
    SeriesMarker can't split shape-color from text-color, so this is a plain
    HTML overlay positioned the same way as .patternpulse, see
