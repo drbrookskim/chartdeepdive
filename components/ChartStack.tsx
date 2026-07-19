@@ -121,10 +121,10 @@ const cssVar = (name: string) =>
  * 60=green, 120=dark gray, same in both themes). */
 const MA_COLORS: Record<number, string> = {
   5: "#000000",
-  10: "#00266e",
-  20: "#cc6f00",
-  60: "#1f6e2f",
-  120: "#333333",
+  10: "#4d79c7",
+  20: "#ffa733",
+  60: "#4caf5a",
+  120: "#8a8a8a",
 };
 
 type LineDatum = { time: Time; value: number };
@@ -1090,7 +1090,7 @@ export default function ChartStack({
       for (const ma of analysis.indicators.sma.byPeriod) {
         const s = main.addLineSeries({
           color: MA_COLORS[ma.period] ?? cssVar("--accent"),
-          lineWidth: 1,
+          lineWidth: 2,
           priceLineVisible: false,
           lastValueVisible: false,
           crosshairMarkerVisible: false,
@@ -1104,7 +1104,7 @@ export default function ChartStack({
       for (const ma of analysis.indicators.ema.byPeriod) {
         const s = main.addLineSeries({
           color: MA_COLORS[ma.period] ?? cssVar("--accent"),
-          lineWidth: 1,
+          lineWidth: 2,
           lineStyle: LineStyle.Dashed,
           priceLineVisible: false,
           lastValueVisible: false,
