@@ -41,6 +41,11 @@ export default function AuthPromptModal({
           </svg>
           Google로 계속하기
         </button>
+        <div className="authmodal__sub">
+          Google 계정으로 간편하게 로그인하세요.
+          <br />
+          별도 회원가입이 필요 없습니다.
+        </div>
       </div>
     </div>
   );

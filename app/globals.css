@@ -214,6 +214,11 @@ button {
   max-width: 580px;
   margin: 0 auto;
 }
+.searchhero .googlesignin {
+  /* same gap as title-to-searchbox (h1's margin-bottom) so both spaces
+     read as one consistent rhythm, not searchbox-hugs-button */
+  margin-top: 28px;
+}
 .googlesignin {
   display: inline-flex;
   align-items: center;
@@ -335,6 +340,12 @@ button {
   font-size: 14px;
   color: var(--text-muted);
   margin-bottom: 22px;
+}
+.authmodal__sub {
+  margin-top: 18px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-faint);
 }
 .logoutmodal__actions {
   display: flex;
