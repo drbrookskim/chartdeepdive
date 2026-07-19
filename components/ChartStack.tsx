@@ -121,10 +121,10 @@ const cssVar = (name: string) =>
  * 60=green, 120=dark gray, same in both themes). */
 const MA_COLORS: Record<number, string> = {
   5: "#000000",
-  10: "#0033a0",
-  20: "#ff8c00",
-  60: "#2e8b3d",
-  120: "#555555",
+  10: "#00266e",
+  20: "#cc6f00",
+  60: "#1f6e2f",
+  120: "#333333",
 };
 
 type LineDatum = { time: Time; value: number };
