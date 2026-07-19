@@ -916,6 +916,28 @@ button {
 .patternpulse.animate {
   animation: patternpulse-bob 0.9s ease-in-out infinite;
 }
+
+/* elliott wave-point badge: neon fill, black border + number (a native
+   SeriesMarker can't split shape-color from text-color, so this is a plain
+   HTML overlay positioned the same way as .patternpulse, see
+   elliottPointsRef/repositionArrows in ChartStack.tsx) */
+.elliottpoint {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--neon);
+  border: 2px solid #000;
+  color: #000;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
 @keyframes patternpulse-bob {
   0%,
   100% {

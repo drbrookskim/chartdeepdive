@@ -346,6 +346,7 @@ export default function ChartStack({
   const patternRevealedRef = useRef<Set<string>>(new Set());
   const patternHarmonicRef = useRef<Set<string>>(new Set());
   const patternArrowsRef = useRef<Map<string, HTMLDivElement>>(new Map());
+  const elliottPointsRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const staticMarkersRef = useRef<SeriesMarker<Time>[]>([]);
   // Mobile only (see .subtab-bar CSS breakpoint): RSI/MACD share screen space
   // via tabs instead of stacking, so only one sub-chart needs real width at a
@@ -426,6 +427,20 @@ export default function ChartStack({
       el.style.display = "block";
       el.style.left = `${x}px`;
       el.style.top = `${y + (el.dataset.dir === "up" ? 16 : -16)}px`;
+    }
+    for (const el of elliottPointsRef.current.values()) {
+      const t = el.dataset.time;
+      const p = el.dataset.price;
+      if (!t || !p) continue;
+      const rawX = main.timeScale().timeToCoordinate(t as Time);
+      const y = series.priceToCoordinate(Number(p));
+      if (rawX == null || y == null) {
+        el.style.display = "none";
+        continue;
+      }
+      el.style.display = "flex";
+      el.style.left = `${Math.min(rawX, plotWidth - ARROW_HALF)}px`;
+      el.style.top = `${y - 16}px`;
     }
   }, []);
 
@@ -1269,16 +1284,10 @@ export default function ChartStack({
         crosshairMarkerVisible: false,
       });
       wave.setData(imp.waves.map((w) => ({ time: w.date as Time, value: w.price })));
-      for (const w of imp.waves) {
-        staticMarkers.push({
-          time: w.date as Time,
-          position: "aboveBar",
-          color: cssVar("--elliott"),
-          shape: "circle",
-          text: w.label,
-          size: 2,
-        });
-      }
+      // Wave-point badges are custom HTML (see elliottPointsRef below), not
+      // native SeriesMarker, so the neon fill + black border/number can be
+      // styled independently — a single marker's shape and text always
+      // share one color, which can't express that combo.
     }
 
     if (layers.inflection && analysis?.advanced.inflectionPoints) {
@@ -1308,6 +1317,8 @@ export default function ChartStack({
     if (patternLinesRef.current) patternLinesRef.current.innerHTML = "";
     for (const el of patternArrowsRef.current.values()) el.remove();
     patternArrowsRef.current = new Map();
+    for (const el of elliottPointsRef.current.values()) el.remove();
+    elliottPointsRef.current = new Map();
     drawPatternShapes(selectedPatterns);
 
     // Same bouncing neon-outlined arrows checked patterns get (see
@@ -1317,6 +1328,15 @@ export default function ChartStack({
     // a few lines later.
     if (layers.elliott && analysis?.advanced.elliottWave?.impulse && arrowsContainerRef.current) {
       const waves = analysis.advanced.elliottWave.impulse.waves;
+      waves.forEach((w, i) => {
+        const el = document.createElement("div");
+        el.className = "elliottpoint";
+        el.textContent = w.label;
+        el.dataset.time = w.date;
+        el.dataset.price = String(w.price);
+        arrowsContainerRef.current!.appendChild(el);
+        elliottPointsRef.current.set(`elliott-pt-${i}`, el);
+      });
       const last = waves[waves.length - 1];
       const prevWave = waves[waves.length - 2];
       if (last) {

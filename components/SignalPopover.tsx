@@ -13,6 +13,7 @@ interface Props {
 export default function SignalPopover({ analysis, topPattern, onClose }: Props) {
   const ich = analysis?.advanced.ichimoku;
   const ell = analysis?.advanced.elliottWave;
+  const infl = analysis?.advanced.inflectionPoints;
 
   return (
     <div className="signalpop" role="dialog" aria-label="신호 요약">
@@ -36,6 +37,19 @@ export default function SignalPopover({ analysis, topPattern, onClose }: Props) 
               : "—"}
           </span>
         </div>
+        <div className="signalrow">
+          <span>변곡점 예측</span>
+          <span className="val neutral">
+            {infl ? `탐지 ${infl.points.length}건` : "미검출"}
+          </span>
+        </div>
+        {infl && (
+          <div className="disclaimer">
+            변곡점 confidence는 확률이 아니라 규칙별 고정 가중치 합산 점수입니다
+            (거래량이상 0.25 · RSI다이버전스 0.3 · OBV다이버전스 0.25 · BB스퀴즈
+            0.2, 최대 1.0). 예: 0.55 = RSI다이버전스+거래량이상 두 규칙 부합.
+          </div>
+        )}
         <div className="disclaimer">참고용 탐지 요약이며 투자자문이 아닙니다.</div>
       </div>
       <button
