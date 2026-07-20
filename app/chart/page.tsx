@@ -70,6 +70,30 @@ function loadShowPatterns(): boolean {
   return v == null ? true : v === "1";
 }
 
+// Which patterns are checked survives a reload too, per-symbol (like the
+// drawn lines — a pattern key only means something for that symbol's data).
+function patternSelStorageKey(market: string, symbol: string): string {
+  return `cdd-pattern-sel:${market}:${symbol}`;
+}
+function loadSelectedPatternKeys(market: string, symbol: string): Set<string> {
+  if (typeof window === "undefined" || !symbol) return new Set();
+  try {
+    const raw = localStorage.getItem(patternSelStorageKey(market, symbol));
+    const arr = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(arr) ? arr : []);
+  } catch {
+    return new Set();
+  }
+}
+function saveSelectedPatternKeys(market: string, symbol: string, keys: Set<string>) {
+  if (typeof window === "undefined" || !symbol) return;
+  try {
+    localStorage.setItem(patternSelStorageKey(market, symbol), JSON.stringify([...keys]));
+  } catch {
+    /* quota/full — ignore, non-critical */
+  }
+}
+
 /** Observe data-theme mutations so charts rebuild with the right palette. */
 function useThemeVersion(): number {
   const [v, setV] = useState(0);
@@ -245,10 +269,20 @@ function ChartInner() {
     [patterns],
   );
 
-  // A fresh pattern list (new symbol/analysis) defaults to "none selected".
+  // A fresh pattern list (new symbol/analysis) restores whatever was saved
+  // for THIS symbol last time (filtered to keys that still exist in the new
+  // list — stale keys from a since-changed analysis are dropped silently)
+  // instead of always defaulting to "none selected".
   useEffect(() => {
-    setSelectedKeys(new Set());
+    const stored = loadSelectedPatternKeys(market, symbol);
+    const valid = new Set(patternsWithKeys.map((x) => x.key));
+    setSelectedKeys(new Set([...stored].filter((k) => valid.has(k))));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [patternsWithKeys]);
+
+  useEffect(() => {
+    saveSelectedPatternKeys(market, symbol, selectedKeys);
+  }, [selectedKeys, market, symbol]);
 
   const selectedPatterns = useMemo(
     () => (showPatterns ? patternsWithKeys.filter((x) => selectedKeys.has(x.key)) : []),
