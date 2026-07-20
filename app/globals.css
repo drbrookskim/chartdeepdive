@@ -144,11 +144,41 @@ button {
   letter-spacing: 0.01em;
   cursor: pointer;
   color: inherit;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .appheader__right {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-shrink: 0;
+}
+/* Both app headers (home .appheader, chart .appbar) must stay one line even
+   on narrow phones — flex-wrap was letting the brand/back button, market
+   filter, and account chip wrap onto a second row and overlap the search
+   field. Below this width, non-essential text (account name, back-button
+   label) collapses to icons instead of wrapping. */
+@media (max-width: 480px) {
+  .appheader {
+    gap: 8px;
+    padding: 12px 14px;
+  }
+  .appheader__brand {
+    font-size: 14px;
+  }
+  .appheader__right {
+    gap: 6px;
+  }
+  .marketchip button {
+    padding: 4px 7px;
+    font-size: 10px;
+  }
+  .useridchip {
+    padding: 3px;
+  }
+  .useridchip__name {
+    display: none;
+  }
 }
 
 .theme-toggle {
@@ -640,6 +670,10 @@ button {
   white-space: nowrap;
   background: none;
   border: none;
+  flex-shrink: 0;
+}
+.appbar__back-short {
+  display: none;
 }
 .appbar__center {
   flex: 1;
@@ -664,6 +698,49 @@ button {
   color: var(--text-muted);
   background: var(--surface-2);
   max-width: 360px;
+}
+/* Same one-line requirement as .appheader (see its media block above) — the
+   chart page packs a back button, live search field, market filter, and
+   account chip into the same row, so it needs more aggressive collapsing:
+   the back button and account name shrink to icons, the market filter
+   shrinks, and the search/id field is what's left to flex and ellipsize. */
+@media (max-width: 640px) {
+  .appbar {
+    flex-wrap: nowrap;
+    gap: 8px;
+    padding: 10px 12px;
+  }
+  .appbar__back-full {
+    display: none;
+  }
+  .appbar__back-short {
+    display: inline;
+    font-size: 20px;
+    line-height: 1;
+  }
+  .appbar__id {
+    min-width: 0;
+    max-width: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
+    padding: 7px 10px;
+  }
+  .marketchip {
+    flex-shrink: 0;
+  }
+  .marketchip button {
+    padding: 4px 7px;
+    font-size: 10px;
+  }
+  .useridchip {
+    flex-shrink: 0;
+    padding: 3px;
+  }
+  .useridchip__name {
+    display: none;
+  }
 }
 .summarybar {
   display: flex;
@@ -1383,12 +1460,15 @@ button {
   padding: 4px 0 0;
 }
 
-/* signal popover */
+/* signal popover — position:fixed with left/top/width set inline by
+   SignalPopover.tsx (viewport-clamped against the button's actual measured
+   position, see its effect); the values below are just an unclamped
+   fallback for the first paint before that effect runs. */
 .signalpop {
-  position: absolute;
+  position: fixed;
   top: 0;
-  left: calc(100% + 8px);
-  width: 280px;
+  left: 0;
+  width: min(280px, calc(100vw - 16px));
   background: var(--surface); /* opaque */
   border: 1px solid var(--border);
   border-radius: 10px;

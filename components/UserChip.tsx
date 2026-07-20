@@ -21,7 +21,7 @@ export default function UserChip() {
         ) : (
           <span className="useridchip__fallback">{initial}</span>
         )}
-        {session.user?.name}
+        <span className="useridchip__name">{session.user?.name}</span>
       </button>
       {confirming && (
         <div className="logoutmodal__overlay" onClick={() => setConfirming(false)}>

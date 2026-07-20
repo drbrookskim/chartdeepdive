@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession, signIn } from "next-auth/react";
 import ThemeToggle from "@/components/ThemeToggle";
 import UserChip from "@/components/UserChip";
 import SearchBox from "@/components/SearchBox";
 import type { SearchResult, Market } from "@/lib/api";
-import { getRecent, pushRecent, removeRecent } from "@/lib/recent";
+import { useRecent } from "@/lib/recent";
 
 export default function SearchPage() {
   const router = useRouter();
@@ -16,21 +16,14 @@ export default function SearchPage() {
     KR: true,
     US: true,
   });
-  const [recent, setRecent] = useState<SearchResult[]>([]);
+  const { recent, push: pushRecent, remove: removeRecent } = useRecent();
   const [expanded, setExpanded] = useState(false);
-
-  // Recent search history is a signed-in perk — an anonymous visitor's
-  // localStorage might still have entries from a prior logged-in session on
-  // this browser, so gate on `session` rather than just skipping the fetch.
-  useEffect(() => {
-    if (session) setRecent(getRecent());
-  }, [session]);
 
   const RECENT_COLLAPSED = 6;
   const visibleRecent = expanded ? recent : recent.slice(0, RECENT_COLLAPSED);
 
   function select(r: SearchResult) {
-    if (session) pushRecent(r);
+    pushRecent(r);
     const qs = new URLSearchParams({
       symbol: r.symbol,
       market: r.market,
@@ -94,7 +87,7 @@ export default function SearchPage() {
                     className="chipremove"
                     onClick={(e) => {
                       e.stopPropagation();
-                      setRecent(removeRecent(r.symbol));
+                      removeRecent(r.symbol);
                     }}
                     aria-label={`${r.name} 최근 검색에서 삭제`}
                     title="삭제"

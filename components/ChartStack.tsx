@@ -1025,12 +1025,14 @@ export default function ChartStack({
       // instead of floating a few bars in from the edge.
       timeScale: { borderColor: border, rightOffset: 0 },
       crosshair: { horzLine: { labelBackgroundColor: text } },
-      // Zoom only via mouse wheel; drag is left/right pan only (no vertical
-      // price-axis rescale-by-drag, no pinch/axis-drag zoom).
+      // Desktop: zoom via mouse wheel only, drag is left/right pan only (no
+      // vertical price-axis rescale-by-drag). Mobile has no wheel, so pinch
+      // is the only way to zoom there — kept on alongside horizontal touch
+      // drag for panning.
       handleScroll: { mouseWheel: false, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
       handleScale: {
         mouseWheel: true,
-        pinch: false,
+        pinch: true,
         axisPressedMouseMove: { time: false, price: false },
       },
     } as const;

@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import type { AnalysisResult } from "@/lib/api";
 import type { Pattern } from "@/lib/analysis/patterns";
 import { patternLabel, signalText } from "@/lib/format";
@@ -15,8 +16,30 @@ export default function SignalPopover({ analysis, topPattern, onClose }: Props) 
   const ell = analysis?.advanced.elliottWave;
   const infl = analysis?.advanced.inflectionPoints;
 
+  // Opens to the right of the "신호요약" button when there's room (desktop);
+  // on a narrow screen a fixed 280px popup starting there would run off the
+  // right edge, so clamp it fully into the viewport instead — sliding left
+  // just enough, not jumping to a mirrored position that can itself run off
+  // the *left* edge when the button sits mid-screen (a plain left/right flip
+  // doesn't work once the popup is wider than either side's free space).
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    const anchor = el?.parentElement?.querySelector<HTMLElement>(".signalbtn");
+    if (!el || !anchor) return;
+    const a = anchor.getBoundingClientRect();
+    const margin = 8;
+    const width = Math.min(280, window.innerWidth - margin * 2);
+    let left = a.right + margin;
+    left = Math.min(left, window.innerWidth - margin - width);
+    left = Math.max(margin, left);
+    el.style.left = `${left}px`;
+    el.style.top = `${a.top}px`;
+    el.style.width = `${width}px`;
+  }, []);
+
   return (
-    <div className="signalpop" role="dialog" aria-label="신호 요약">
+    <div ref={ref} className="signalpop" role="dialog" aria-label="신호 요약">
       <div className="signalpop__head">신호 요약</div>
       <div className="signalpop__body">
         <SignalLine

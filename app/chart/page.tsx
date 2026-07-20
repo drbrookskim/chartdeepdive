@@ -21,7 +21,7 @@ import {
   type Market,
   type SearchResult,
 } from "@/lib/api";
-import { pushRecent } from "@/lib/recent";
+import { useRecent } from "@/lib/recent";
 import { formatPrice, formatSigned } from "@/lib/format";
 
 // lightweight-charts touches the DOM/window; load the chart client-side only.
@@ -51,6 +51,7 @@ function useThemeVersion(): number {
 function ChartInner() {
   const router = useRouter();
   const { data: session, status: sessionStatus } = useSession();
+  const { push: pushRecent } = useRecent();
   const [showAuthPrompt, setShowAuthPrompt] = useState(false);
   const params = useSearchParams();
   const symbol = params.get("symbol") ?? "";
@@ -296,7 +297,8 @@ function ChartInner() {
     <>
       <header className="appbar">
         <button className="appbar__back" onClick={() => router.push("/")}>
-          Chart Deep Dive
+          <span className="appbar__back-full">Chart Deep Dive</span>
+          <span className="appbar__back-short" aria-hidden="true">‹</span>
         </button>
         <div className="appbar__center">
           {researching ? (

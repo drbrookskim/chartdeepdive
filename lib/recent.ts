@@ -1,41 +1,29 @@
-// Recent-search persistence (localStorage). Mirrors the EquiSense "recent
-// first" pattern referenced in the wireframe. Stores the minimal fields needed
-// to jump straight back into a chart.
+"use client";
 
+// Recent-search list, account-based (stored in the signed-in user's JWT via
+// the session `update()` trigger — see auth.ts's callbacks) rather than
+// per-browser localStorage, so it follows the Google account across devices.
+// Signed-out visitors get an empty list; push/remove are no-ops for them.
+
+import { useSession } from "next-auth/react";
 import type { SearchResult } from "@/lib/schema";
 
-const KEY = "cdd-recent";
 const MAX = 12;
 
-export function getRecent(): SearchResult[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as SearchResult[]) : [];
-  } catch {
-    return [];
-  }
-}
+export function useRecent() {
+  const { data: session, update } = useSession();
+  const recent = session?.recent ?? [];
 
-export function pushRecent(item: SearchResult): SearchResult[] {
-  const existing = getRecent().filter((r) => r.symbol !== item.symbol);
-  const next = [item, ...existing].slice(0, MAX);
-  try {
-    localStorage.setItem(KEY, JSON.stringify(next));
-  } catch {
-    /* quota/full — ignore, non-critical */
+  async function push(item: SearchResult) {
+    if (!session) return;
+    const next = [item, ...recent.filter((r) => r.symbol !== item.symbol)].slice(0, MAX);
+    await update({ recent: next });
   }
-  return next;
-}
 
-export function removeRecent(symbol: string): SearchResult[] {
-  const next = getRecent().filter((r) => r.symbol !== symbol);
-  try {
-    localStorage.setItem(KEY, JSON.stringify(next));
-  } catch {
-    /* quota/full — ignore, non-critical */
+  async function remove(symbol: string) {
+    if (!session) return;
+    await update({ recent: recent.filter((r) => r.symbol !== symbol) });
   }
-  return next;
+
+  return { recent, push, remove };
 }
