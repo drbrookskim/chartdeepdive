@@ -50,6 +50,31 @@ function placeChartBalloon(popup: HTMLDivElement, x: number, anchorTop: number) 
 
 type Candle = OhlcvResponse["candles"][number];
 
+/** localStorage key for a symbol's drawn horizontal/trend lines — survives
+ * reload (see the [candles] effect that loads it, and saveLines that writes
+ * it back after every add/drag/delete). */
+function linesStorageKey(market: string, symbol: string): string {
+  return `cdd-lines:${market}:${symbol}`;
+}
+
+type StoredHorizontal = { id: number; price: number };
+type StoredTrend = { id: number; p1: { time: Time; price: number }; p2: { time: Time; price: number } };
+
+function loadStoredLines(market: string, symbol: string): { horizontals: StoredHorizontal[]; trends: StoredTrend[] } {
+  if (typeof window === "undefined" || !symbol) return { horizontals: [], trends: [] };
+  try {
+    const raw = localStorage.getItem(linesStorageKey(market, symbol));
+    if (!raw) return { horizontals: [], trends: [] };
+    const parsed = JSON.parse(raw);
+    return {
+      horizontals: Array.isArray(parsed?.horizontals) ? parsed.horizontals : [],
+      trends: Array.isArray(parsed?.trends) ? parsed.trends : [],
+    };
+  } catch {
+    return { horizontals: [], trends: [] };
+  }
+}
+
 /** Compact volume abbreviation (1.2M / 34.1K) for the OHLC hover legend. */
 function formatVol(v: number): string {
   if (v >= 1e9) return `${(v / 1e9).toFixed(2)}B`;
@@ -990,16 +1015,24 @@ export default function ChartStack({
     setHistoryCandles(null);
     loadingMoreRef.current = false;
     noMoreHistoryRef.current = false;
-    // Drawings are per-instrument — a genuinely new symbol clears them (this
+    // Drawings are per-instrument — a genuinely new symbol resets them (this
     // effect does NOT fire for pan-triggered history loads or intraday zoom
     // swaps, which use separate local state, so mid-session drawings survive
-    // those). Price-line handles die with the old candleSeries on its own.
-    horizontalsRef.current = [];
+    // those) and reloads whatever was saved for THIS symbol (see
+    // linesStorageKey/loadStoredLines — reload persistence). Price-line
+    // handles die with the old candleSeries on its own.
+    const stored = loadStoredLines(market, symbol);
+    horizontalsRef.current = stored.horizontals;
     priceLineHandlesRef.current = new Map();
-    trendsRef.current = [];
+    trendsRef.current = stored.trends;
     trendPendingRef.current = null;
+    drawingIdRef.current = Math.max(
+      0,
+      ...stored.horizontals.map((h) => h.id),
+      ...stored.trends.map((t) => t.id),
+    );
     setDrawingsTick((t) => t + 1);
-  }, [candles]);
+  }, [candles, symbol, market]);
 
   useEffect(() => {
     if (!mainRef.current || candles.length === 0) return;
@@ -1813,6 +1846,7 @@ export default function ChartStack({
         reapplyHorizontals();
         drawUserLines();
         setDrawingsTick((t) => t + 1);
+        saveLines();
         return;
       }
       // trend mode: first click sets the anchor, second click finalizes it
@@ -1825,6 +1859,7 @@ export default function ChartStack({
         trendPendingRef.current = null;
         drawUserLines();
         setDrawingsTick((t) => t + 1);
+        saveLines();
       }
     };
     main.subscribeClick(onChartClick);
@@ -1835,7 +1870,7 @@ export default function ChartStack({
     // move the native IPriceLine directly (applyOptions, no recreation),
     // trend endpoint drags rewrite that point and redraw the SVG line.
     const HIT_TOLERANCE = 8;
-    const localXY = (e: MouseEvent) => {
+    const localXY = (e: PointerEvent) => {
       const rect = mainRef.current!.getBoundingClientRect();
       return { x: e.clientX - rect.left, y: e.clientY - rect.top };
     };
@@ -1899,7 +1934,7 @@ export default function ChartStack({
       editingLineRef.current = null;
       restyleHit(target);
     };
-    const onDrawMouseDown = (e: MouseEvent) => {
+    const onDrawMouseDown = (e: PointerEvent) => {
       if (drawModeRef.current) return; // placing a new line takes priority
       const { x, y } = localXY(e);
       const hit = hitTestLines(x, y);
@@ -1934,7 +1969,7 @@ export default function ChartStack({
         dragRef.current = hit;
       }, LONG_PRESS_MS);
     };
-    const onDrawMouseMove = (e: MouseEvent) => {
+    const onDrawMouseMove = (e: PointerEvent) => {
       const series = candleSeriesRef.current;
       const drag = dragRef.current;
       const { x, y } = localXY(e);
@@ -2027,17 +2062,21 @@ export default function ChartStack({
         editingLineRef.current = null;
         restyleHit(hit);
       }
+      if (hit && mouseMovedRef.current) saveLines(); // an actual drag happened
       dragRef.current = null;
       mouseDownPosRef.current = null;
     };
-    mainRef.current.addEventListener("mousedown", onDrawMouseDown, true);
-    window.addEventListener("mousemove", onDrawMouseMove);
-    window.addEventListener("mouseup", onDrawMouseUp);
+    // Pointer events (not mouse-only) so longpress-to-edit also works on
+    // touch — PointerEvent unifies mouse/touch/pen with the same
+    // clientX/clientY shape the handlers already use.
+    mainRef.current.addEventListener("pointerdown", onDrawMouseDown, true);
+    window.addEventListener("pointermove", onDrawMouseMove);
+    window.addEventListener("pointerup", onDrawMouseUp);
     // On-canvas delete (×) buttons on the currently-editing line's badge —
     // delegated to one listener per overlay svg since the badge <g> nodes
     // are pooled/reused across redraws (see drawUserLines), so attaching a
     // fresh listener per node on every redraw would leak.
-    const onLineDeleteClick = (e: MouseEvent) => {
+    const onLineDeleteClick = (e: PointerEvent) => {
       const target = (e.target as Element).closest("[data-del-type]");
       if (!target) return;
       e.preventDefault();
@@ -2055,16 +2094,17 @@ export default function ChartStack({
       }
       drawUserLines();
       setDrawingsTick((t) => t + 1);
+      saveLines();
     };
-    userLinesRef.current?.addEventListener("mousedown", onLineDeleteClick, true);
-    hLabelsRef.current?.addEventListener("mousedown", onLineDeleteClick, true);
+    userLinesRef.current?.addEventListener("pointerdown", onLineDeleteClick, true);
+    hLabelsRef.current?.addEventListener("pointerdown", onLineDeleteClick, true);
     // Clicking anywhere outside the chart entirely (sidebar, header, ...)
     // also finishes editing — onDrawMouseDown only covers clicks inside the
     // chart itself. Capture phase so it fires before the click's own handler.
-    const onDocumentMouseDown = (e: MouseEvent) => {
+    const onDocumentMouseDown = (e: PointerEvent) => {
       if (editingLineRef.current && !mainRef.current?.contains(e.target as Node)) finishEditing();
     };
-    document.addEventListener("mousedown", onDocumentMouseDown, true);
+    document.addEventListener("pointerdown", onDocumentMouseDown, true);
 
     // ---- responsive resize: all panes share the chart column width ----
     // The chart can be created before the grid finishes laying out (width ~0);
@@ -2094,12 +2134,12 @@ export default function ChartStack({
       main.unsubscribeCrosshairMove(crosshairHandler);
       main.timeScale().unsubscribeVisibleTimeRangeChange(rangeHandler);
       main.unsubscribeClick(onChartClick);
-      mainRef.current?.removeEventListener("mousedown", onDrawMouseDown, true);
-      window.removeEventListener("mousemove", onDrawMouseMove);
-      window.removeEventListener("mouseup", onDrawMouseUp);
-      document.removeEventListener("mousedown", onDocumentMouseDown, true);
-      userLinesRef.current?.removeEventListener("mousedown", onLineDeleteClick, true);
-      hLabelsRef.current?.removeEventListener("mousedown", onLineDeleteClick, true);
+      mainRef.current?.removeEventListener("pointerdown", onDrawMouseDown, true);
+      window.removeEventListener("pointermove", onDrawMouseMove);
+      window.removeEventListener("pointerup", onDrawMouseUp);
+      document.removeEventListener("pointerdown", onDocumentMouseDown, true);
+      userLinesRef.current?.removeEventListener("pointerdown", onLineDeleteClick, true);
+      hLabelsRef.current?.removeEventListener("pointerdown", onLineDeleteClick, true);
       dragRef.current = null;
       if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
       if (zoomTimerRef.current) clearTimeout(zoomTimerRef.current);
@@ -2237,6 +2277,21 @@ export default function ChartStack({
   const onRsiResizeDown = makeResizeHandler(rsiHeightRef, rsiApiRef, MIN_SUB_HEIGHT, MAX_SUB_HEIGHT);
   const onMacdResizeDown = makeResizeHandler(macdHeightRef, macdApiRef, MIN_SUB_HEIGHT, MAX_SUB_HEIGHT);
 
+  // Persists the current horizontal/trend lines for THIS symbol so a reload
+  // restores them (see loadStoredLines in the [candles] effect above) —
+  // called after every add/drag/delete/clear.
+  function saveLines() {
+    if (!symbol || typeof window === "undefined") return;
+    try {
+      localStorage.setItem(
+        linesStorageKey(market, symbol),
+        JSON.stringify({ horizontals: horizontalsRef.current, trends: trendsRef.current }),
+      );
+    } catch {
+      /* quota/full — ignore, non-critical */
+    }
+  }
+
   function clearDrawings() {
     const series = candleSeriesRef.current;
     if (series) for (const h of priceLineHandlesRef.current.values()) series.removePriceLine(h);
@@ -2248,6 +2303,7 @@ export default function ChartStack({
     setDrawingsTick((t) => t + 1);
     setJustCleared(true);
     setTimeout(() => setJustCleared(false), 220);
+    saveLines();
   }
 
   function removeHorizontal(id: number) {
@@ -2255,12 +2311,14 @@ export default function ChartStack({
     reapplyHorizontals();
     drawUserLines();
     setDrawingsTick((t) => t + 1);
+    saveLines();
   }
 
   function removeTrend(id: number) {
     trendsRef.current = trendsRef.current.filter((t) => t.id !== id);
     drawUserLines();
     setDrawingsTick((t) => t + 1);
+    saveLines();
   }
 
   return (

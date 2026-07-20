@@ -34,6 +34,42 @@ const ChartStack = dynamic(() => import("@/components/ChartStack"), {
 // the initial *visible* viewport to the most recent 3 months.
 const FETCH_PERIOD = "10y";
 
+// Layer/pattern-section toggles survive a reload (localStorage) — a global
+// preference, not per-symbol (unlike the drawn horizontal/trend lines, which
+// ChartStack.tsx persists per-symbol since price levels only make sense for
+// that one instrument).
+const LAYERS_KEY = "cdd-layers";
+const SHOW_PATTERNS_KEY = "cdd-show-patterns";
+const DEFAULT_LAYERS: LayerState = {
+  ma: true,
+  ema: false,
+  bollinger: true,
+  volume: true,
+  volumeProfile: false,
+  rsi: true,
+  macd: false,
+  ichimoku: false,
+  elliott: false,
+  inflection: false,
+};
+
+function loadLayers(): LayerState {
+  if (typeof window === "undefined") return DEFAULT_LAYERS;
+  try {
+    const raw = localStorage.getItem(LAYERS_KEY);
+    if (!raw) return DEFAULT_LAYERS;
+    return { ...DEFAULT_LAYERS, ...JSON.parse(raw) };
+  } catch {
+    return DEFAULT_LAYERS;
+  }
+}
+
+function loadShowPatterns(): boolean {
+  if (typeof window === "undefined") return true;
+  const v = localStorage.getItem(SHOW_PATTERNS_KEY);
+  return v == null ? true : v === "1";
+}
+
 /** Observe data-theme mutations so charts rebuild with the right palette. */
 function useThemeVersion(): number {
   const [v, setV] = useState(0);
@@ -65,18 +101,7 @@ function ChartInner() {
   const [error, setError] = useState<ApiCallError | null>(null);
   const [analysisError, setAnalysisError] = useState<ApiCallError | null>(null);
 
-  const [layers, setLayers] = useState<LayerState>({
-    ma: true,
-    ema: false,
-    bollinger: true,
-    volume: true,
-    volumeProfile: false,
-    rsi: true,
-    macd: false,
-    ichimoku: false,
-    elliott: false,
-    inflection: false,
-  });
+  const [layers, setLayers] = useState<LayerState>(loadLayers);
   // Mirrors the main chart's live rendered height (ChartStack reports it via
   // onMainHeightChange) so the pattern list can be capped/scrolled to match
   // instead of stretching the whole page.
@@ -84,7 +109,21 @@ function ChartInner() {
   // Patterns default to hidden — the user opts in per-pattern (or "전체
   // 선택"). `selectedKeys` is reset to "none" whenever a fresh pattern list
   // arrives (new symbol/analysis), not on every render.
-  const [showPatterns, setShowPatterns] = useState(true);
+  const [showPatterns, setShowPatterns] = useState(loadShowPatterns);
+  useEffect(() => {
+    try {
+      localStorage.setItem(LAYERS_KEY, JSON.stringify(layers));
+    } catch {
+      /* quota/full — ignore, non-critical */
+    }
+  }, [layers]);
+  useEffect(() => {
+    try {
+      localStorage.setItem(SHOW_PATTERNS_KEY, showPatterns ? "1" : "0");
+    } catch {
+      /* quota/full — ignore, non-critical */
+    }
+  }, [showPatterns]);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   // Set whenever a pattern is just checked on — tells ChartStack to pan to
   // it (keeping the user's current zoom level, not resetting it). seq forces
