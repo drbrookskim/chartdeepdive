@@ -1,20 +1,25 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { DM_Sans, Space_Grotesk } from "next/font/google";
 import Script from "next/script";
 import Providers from "@/components/Providers";
 import "./globals.css";
 
 const GA_ID = "G-7TCC1MQPYP";
 
-// Inter is what both attached brand specs use for Latin/digits (Voltagent
-// directly; Airtable's Haas Grotesk substitutes to Inter Display) — self-
-// hosted via next/font. Its Hangul coverage doesn't exist, so Korean text
-// falls through to Noto Sans KR, loaded the normal way via a <link> below
-// (next/font/google doesn't self-host Noto Sans KR's Hangul subset).
-const inter = Inter({
+// Space Grotesk is the app-wide Latin/digit face (--sans); DM Sans is
+// reserved for the "Chart Deep Dive" wordmark only (--brand). Neither has
+// Hangul coverage, so Korean text falls through to Noto Sans KR, loaded the
+// normal way via a <link> below (next/font/google doesn't self-host Noto
+// Sans KR's Hangul subset).
+const spaceGrotesk = Space_Grotesk({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
-  variable: "--font-inter",
+  variable: "--font-space-grotesk",
+});
+const dmSans = DM_Sans({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-dm-sans",
 });
 
 export const metadata: Metadata = {
@@ -30,7 +35,7 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="ko" suppressHydrationWarning className={inter.variable}>
+    <html lang="ko" suppressHydrationWarning className={`${spaceGrotesk.variable} ${dmSans.variable}`}>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
