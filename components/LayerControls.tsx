@@ -103,13 +103,38 @@ export default function LayerControls({
   const [expandBasic, setExpandBasic] = useState(true);
   const [expandAdvanced, setExpandAdvanced] = useState(true);
 
+  const BASIC_KEYS: (keyof LayerState)[] = ["ma", "ema", "bollinger", "volume", "volumeProfile", "rsi", "macd"];
+  const ADVANCED_KEYS: (keyof LayerState)[] = ["ichimoku", "elliott", "inflection"];
+
+  // The section-level switch is a master on/off: off -> on turns on just the
+  // section's representative default (이동평균/일목균형표) and expands the
+  // list so the result is visible; on -> off turns off whatever in the
+  // section is currently on.
+  function toggleSection(keys: (keyof LayerState)[], defaultKey: keyof LayerState, expand: (v: boolean) => void) {
+    const anyOn = keys.some((k) => layers[k]);
+    if (anyOn) {
+      keys.forEach((k) => {
+        if (layers[k]) onLayer(k);
+      });
+    } else {
+      onLayer(defaultKey);
+      expand(true);
+    }
+  }
+
   return (
     <div className="sidecol__inner">
       {/* ---- Layer 1: basic indicators ---- */}
       <div className="layer">
         <button className="layer__head" onClick={() => setExpandBasic((v) => !v)}>
           <strong>① 기본 지표</strong>
-          <span className={`switch ${layers.ma || layers.bollinger || layers.volume || layers.volumeProfile || layers.rsi || layers.macd ? "on" : ""}`} />
+          <span
+            className={`switch ${BASIC_KEYS.some((k) => layers[k]) ? "on" : ""}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleSection(BASIC_KEYS, "ma", setExpandBasic);
+            }}
+          />
         </button>
         {expandBasic && (
         <div className="layer__body">
@@ -243,7 +268,13 @@ export default function LayerControls({
       <div className="layer">
         <button className="layer__head" onClick={() => setExpandAdvanced((v) => !v)}>
           <strong>③ 고급 기법</strong>
-          <span className={`switch ${layers.ichimoku || layers.elliott ? "on" : ""}`} />
+          <span
+            className={`switch ${ADVANCED_KEYS.some((k) => layers[k]) ? "on" : ""}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleSection(ADVANCED_KEYS, "ichimoku", setExpandAdvanced);
+            }}
+          />
         </button>
         {expandAdvanced && (
         <div className="layer__body">

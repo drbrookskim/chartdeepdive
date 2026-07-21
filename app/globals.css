@@ -1294,6 +1294,7 @@ button {
   background: var(--border);
   position: relative;
   flex-shrink: 0;
+  cursor: pointer;
 }
 .switch::after {
   content: "";
