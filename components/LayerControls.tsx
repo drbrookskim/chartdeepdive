@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { AnalysisResult } from "@/lib/api";
 import type { Pattern } from "@/lib/analysis/patterns";
 import type { LayerState } from "@/components/ChartStack";
@@ -96,14 +97,21 @@ export default function LayerControls({
 
   const patternsUnavailable = "patterns" in un;
 
+  // Section header click expands/collapses the checkbox list, same as ②
+  // 패턴's header already does — it no longer doubles as a shortcut for
+  // toggling the first checkbox (that's what the checkbox's own row is for).
+  const [expandBasic, setExpandBasic] = useState(true);
+  const [expandAdvanced, setExpandAdvanced] = useState(true);
+
   return (
     <div className="sidecol__inner">
       {/* ---- Layer 1: basic indicators ---- */}
       <div className="layer">
-        <button className="layer__head" onClick={() => onLayer("ma")}>
+        <button className="layer__head" onClick={() => setExpandBasic((v) => !v)}>
           <strong>① 기본 지표</strong>
           <span className={`switch ${layers.ma || layers.bollinger || layers.volume || layers.volumeProfile || layers.rsi || layers.macd ? "on" : ""}`} />
         </button>
+        {expandBasic && (
         <div className="layer__body">
           <CheckRow
             label="이동평균(MA)"
@@ -166,6 +174,7 @@ export default function LayerControls({
             onClick={() => onLayer("macd")}
           />
         </div>
+        )}
       </div>
 
       {/* ---- Layer 2: patterns ---- */}
@@ -232,10 +241,11 @@ export default function LayerControls({
 
       {/* ---- Layer 3: advanced techniques ---- */}
       <div className="layer">
-        <button className="layer__head" onClick={() => onLayer("ichimoku")}>
+        <button className="layer__head" onClick={() => setExpandAdvanced((v) => !v)}>
           <strong>③ 고급 기법</strong>
           <span className={`switch ${layers.ichimoku || layers.elliott ? "on" : ""}`} />
         </button>
+        {expandAdvanced && (
         <div className="layer__body">
           <CheckRow
             label="일목균형표"
@@ -280,6 +290,7 @@ export default function LayerControls({
             한 번에 하나만 켜는 것을 권장합니다.
           </div>
         </div>
+        )}
       </div>
     </div>
   );
