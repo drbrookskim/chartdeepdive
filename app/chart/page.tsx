@@ -272,15 +272,27 @@ function ChartInner() {
   // A fresh pattern list (new symbol/analysis) restores whatever was saved
   // for THIS symbol last time (filtered to keys that still exist in the new
   // list — stale keys from a since-changed analysis are dropped silently)
-  // instead of always defaulting to "none selected".
+  // instead of always defaulting to "none selected". Guarded on `analysis`
+  // being loaded: patternsWithKeys is `[]` for one render before the fetch
+  // resolves, and without the guard that transient empty list looked
+  // (post-filter) indistinguishable from "nothing to restore" — the save
+  // effect below then wrote that empty set straight over the real saved
+  // data before the real analysis even arrived. patternSelHydratedRef gates
+  // the save effect so it can't fire until a real restore has happened for
+  // the CURRENT symbol.
+  const patternSelHydratedRef = useRef(false);
   useEffect(() => {
+    patternSelHydratedRef.current = false;
+    if (!analysis) return;
     const stored = loadSelectedPatternKeys(market, symbol);
     const valid = new Set(patternsWithKeys.map((x) => x.key));
     setSelectedKeys(new Set([...stored].filter((k) => valid.has(k))));
+    patternSelHydratedRef.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [patternsWithKeys]);
+  }, [patternsWithKeys, analysis]);
 
   useEffect(() => {
+    if (!patternSelHydratedRef.current) return;
     saveSelectedPatternKeys(market, symbol, selectedKeys);
   }, [selectedKeys, market, symbol]);
 
