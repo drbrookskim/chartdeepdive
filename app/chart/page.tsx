@@ -491,8 +491,7 @@ function ChartInner() {
               className="sheet-handle"
               onClick={() => setSheetCollapsed((c) => !c)}
             >
-              <span>⚙ 레이어 설정</span>
-              <span>{sheetCollapsed ? "▼" : "▲"}</span>
+              <span>⚙ 차트 기능 보기</span>
             </button>
             <LayerControls
               analysis={analysis}
