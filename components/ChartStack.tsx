@@ -391,7 +391,19 @@ export default function ChartStack({
   const patternPointsRef = useRef<Map<string, { date: string; price: number }[]>>(new Map());
   const patternRevealedRef = useRef<Set<string>>(new Set());
   const patternHarmonicRef = useRef<Set<string>>(new Set());
+  // Bouncing location arrows for elliott's latest wave / ichimoku(via
+  // ichimokuInfoRef) / each checked inflection point, keyed by their own
+  // literal keys ("elliott-wave", "inflection-N", ...).
   const patternArrowsRef = useRef<Map<string, HTMLDivElement>>(new Map());
+  // Separate map for PATTERN-owned arrows (drawPatternShapes' own bookkeeping)
+  // — kept apart from patternArrowsRef so drawPatternShapes' "remove
+  // whatever isn't in this pattern render's key set" cleanup can't
+  // collateral-delete the elliott/inflection arrows living in the other map
+  // (this actually happened: unchecking/rechecking patterns, or the
+  // selectedPatterns reference simply changing on reload, wiped inflection's
+  // arrows because their "inflection-N" keys were never in a pattern's
+  // nextKeys set).
+  const patternOnlyArrowsRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const elliottPointsRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const ichimokuInfoRef = useRef<Map<string, HTMLDivElement>>(new Map());
   // Balloon popup shared by every clickable chart annotation (inflection
@@ -606,6 +618,22 @@ export default function ChartStack({
       el.style.left = `${x}px`;
       el.style.top = `${arrowTop}px`;
       repositionPopupIfOpen(key, x, arrowTop);
+    }
+    for (const [key, el] of patternOnlyArrowsRef.current) {
+      const t = el.dataset.time;
+      const p = el.dataset.price;
+      if (!t || !p) continue;
+      const rawX = main.timeScale().timeToCoordinate(t as Time);
+      const y = series.priceToCoordinate(Number(p));
+      if (rawX == null || y == null || rawX < -EDGE_OVERSHOOT || rawX > plotWidth + EDGE_OVERSHOOT) {
+        el.style.display = "none";
+        continue;
+      }
+      const x = Math.min(rawX, plotWidth - ARROW_HALF);
+      const arrowTop = y + (el.dataset.dir === "up" ? 16 : -16);
+      el.style.display = "block";
+      el.style.left = `${x}px`;
+      el.style.top = `${arrowTop}px`;
     }
     for (const [key, el] of elliottPointsRef.current) {
       const t = el.dataset.time;
@@ -945,10 +973,10 @@ export default function ChartStack({
           patternHarmonicRef.current.delete(key);
         }
       }
-      for (const [key, el] of patternArrowsRef.current) {
+      for (const [key, el] of patternOnlyArrowsRef.current) {
         if (!nextKeys.has(key)) {
           el.remove();
-          patternArrowsRef.current.delete(key);
+          patternOnlyArrowsRef.current.delete(key);
         }
       }
 
@@ -992,7 +1020,7 @@ export default function ChartStack({
 
         // Persistent bouncing arrow at the pattern's anchor point — stays as
         // long as the pattern is checked (not a one-shot ping).
-        if (!patternArrowsRef.current.has(key)) {
+        if (!patternOnlyArrowsRef.current.has(key)) {
           const anchor = pat.keyPoints[pat.keyPoints.length - 1] ?? pat.keyPoints[0];
           if (anchor) {
             const isLowAnchor = /bottom|trough|low|golden/.test(anchor.kind);
@@ -1003,7 +1031,7 @@ export default function ChartStack({
             el.dataset.price = String(anchor.price);
             el.dataset.dir = isLowAnchor ? "up" : "down";
             arrowsContainer.appendChild(el);
-            patternArrowsRef.current.set(key, el);
+            patternOnlyArrowsRef.current.set(key, el);
           }
         }
       }
@@ -1528,6 +1556,8 @@ export default function ChartStack({
     if (patternLinesRef.current) patternLinesRef.current.innerHTML = "";
     for (const el of patternArrowsRef.current.values()) el.remove();
     patternArrowsRef.current = new Map();
+    for (const el of patternOnlyArrowsRef.current.values()) el.remove();
+    patternOnlyArrowsRef.current = new Map();
     for (const el of elliottPointsRef.current.values()) el.remove();
     elliottPointsRef.current = new Map();
     for (const el of ichimokuInfoRef.current.values()) el.remove();
