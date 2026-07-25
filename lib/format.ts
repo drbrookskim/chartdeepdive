@@ -142,6 +142,18 @@ export function inflectionRuleLabel(rule: string): string {
   return INFLECTION_RULE_LABELS[rule] ?? rule;
 }
 
+const INFLECTION_RULE_HINTS: Record<string, string> = {
+  "volume-anomaly": "거래량이 평소보다 비정상적으로 급증",
+  "rsi-divergence": "가격은 오르내리는데 RSI 지표는 반대로 움직이는 엇갈림",
+  "obv-divergence": "가격은 오르내리는데 누적거래량(OBV)은 반대로 움직이는 엇갈림",
+  "bb-squeeze": "볼린저밴드 폭이 좁아지며 변동성이 줄어든 상태",
+};
+
+/** Plain-language parenthetical for a rule label, for popups shown to non-expert users. */
+export function inflectionRuleHint(rule: string): string | null {
+  return INFLECTION_RULE_HINTS[rule] ?? null;
+}
+
 export function signalText(signal: 1 | -1 | 0): {
   label: string;
   cls: "up" | "down" | "neutral";

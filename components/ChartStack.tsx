@@ -28,6 +28,7 @@ import {
   formatPrice,
   formatSigned,
   inflectionRuleLabel,
+  inflectionRuleHint,
   patternKindLabel,
 } from "@/lib/format";
 
@@ -499,13 +500,16 @@ export default function ChartStack({
   const openInflectionPopup = useCallback(
     (key: string, p: InflectionPoint, arrowEl: HTMLDivElement) => {
       const rulesHtml = p.signals
-        .map((s) => `<li><b>${inflectionRuleLabel(s.rule)}</b> — ${s.detail}</li>`)
+        .map((s) => {
+          const hint = inflectionRuleHint(s.rule);
+          return `<li><b>${inflectionRuleLabel(s.rule)}${hint ? `(${hint})` : ""}</b> — ${s.detail}</li>`;
+        })
         .join("");
       let html =
-        `<div class="chartballoon__head">${p.date} · ${p.direction === "up" ? "상승 전환" : "하락 전환"} · 신뢰점수 ${p.confidence.toFixed(2)}</div>` +
+        `<div class="chartballoon__head">${p.date} · ${p.direction === "up" ? "상승 전환" : "하락 전환"} · 신뢰점수 ${p.confidence.toFixed(2)}(부합 규칙의 가중치를 더한 값, 확률 아님)</div>` +
         `<div class="chartballoon__sub">${formatPrice(p.price, currency)}</div>` +
         `<ul class="chartballoon__rules">${rulesHtml}</ul>` +
-        `<div class="chartballoon__foot">규칙 기반 가중치 합산 점수(확률 아님) — ${p.signals.length}개 규칙 부합</div>`;
+        `<div class="chartballoon__foot">${p.signals.length}개 규칙 부합</div>`;
 
       // Structural confirmation + Elliott sizing — only shown on the ANCHOR
       // point (the most recent inflection hit the chain picked up as
@@ -520,7 +524,7 @@ export default function ChartStack({
           html += `<div class="chartballoon__chain-row"><b>확인됐다면 얼마나 갈 것으로 보이는가(엘리엇 파동 분석)</b><br>${chain.sizing.label}${
             chain.sizing.targetRange
               ? ` · 예상 목표가 ${formatPrice(chain.sizing.targetRange.low, currency)}~${formatPrice(chain.sizing.targetRange.high, currency)}`
-              : ""
+              : ` — ${chain.sizing.detail}`
           }</div>`;
         }
         html += `<div class="chartballoon__foot">위 세 항목은 서로 다른 질문의 답이라 하나의 점수로 합치지 않고 따로 보여줍니다</div>`;
