@@ -1209,6 +1209,22 @@ button {
   font-size: 11px;
   line-height: 1.4;
 }
+/* ipp-continuation-chain block appended to the anchor inflection point's
+   popup — deliberately just two extra rows stacked under a divider, not
+   folded into the confidence line above, so the three layers (IPP/SMC/
+   Elliott) stay visibly separate judgments rather than one blended verdict. */
+.chartballoon__chain {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+}
+.chartballoon__chain-row {
+  margin-bottom: 6px;
+  line-height: 1.4;
+}
+.chartballoon__chain-row b {
+  color: var(--text);
+}
 
 /* elliott wave-point badge: neon fill, black border + number (a native
    SeriesMarker can't split shape-color from text-color, so this is a plain

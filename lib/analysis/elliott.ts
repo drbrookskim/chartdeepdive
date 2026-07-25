@@ -17,6 +17,9 @@ export interface ElliottResult {
   /** Detected impulse wave, or null when no rule-compliant count exists. */
   impulse: {
     direction: "up" | "down";
+    /** P0 — the start of wave 1 (not itself a labeled wave, but needed to
+     * measure the impulse's total length for Fibonacci retracement targets). */
+    start: { date: string; price: number };
     waves: WaveLabel[];
     /** Which fib relationships held, for transparency. */
     checks: { wave2Retrace: boolean; wave3NotShortest: boolean; wave4NoOverlap: boolean };
@@ -124,7 +127,13 @@ export function elliottWave(candles: Candle[], window = 10): ElliottResult {
     if (completed) signal = result.up ? -1 : 1;
 
     return {
-      impulse: { direction, waves, checks: result.checks, completed },
+      impulse: {
+        direction,
+        start: { date: pts[0].date, price: pts[0].price },
+        waves,
+        checks: result.checks,
+        completed,
+      },
       reason: null,
       signal,
     };

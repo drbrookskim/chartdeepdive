@@ -489,14 +489,35 @@ export default function ChartStack({
       const rulesHtml = p.signals
         .map((s) => `<li><b>${inflectionRuleLabel(s.rule)}</b> — ${s.detail}</li>`)
         .join("");
-      const html =
+      let html =
         `<div class="chartballoon__head">${p.date} · ${p.direction === "up" ? "상승 전환" : "하락 전환"} · confidence ${p.confidence.toFixed(2)}</div>` +
         `<div class="chartballoon__sub">${formatPrice(p.price, currency)}</div>` +
         `<ul class="chartballoon__rules">${rulesHtml}</ul>` +
         `<div class="chartballoon__foot">규칙 기반 가중치 합산 점수(확률 아님) — ${p.signals.length}개 규칙 부합</div>`;
+
+      // ipp-continuation-chain — only shown on the ANCHOR point (the most
+      // recent IPP hit the chain picked up as "current"), since structure
+      // confirmation/sizing are evaluated once against the latest signal,
+      // not per historical point. Three layers listed separately, never
+      // merged into one score (see lib/analysis/ipp-chain.ts).
+      const chain = analysis?.advanced.ippChain;
+      if (chain?.anchor?.date === p.date) {
+        html += `<div class="chartballoon__chain">`;
+        html += `<div class="chartballoon__chain-row"><b>구조 확인 (SMC)</b><br>${chain.structure?.label ?? "—"} — ${chain.structure?.detail ?? ""}</div>`;
+        if (chain.sizing) {
+          html += `<div class="chartballoon__chain-row"><b>크기·기간 (Elliott)</b><br>${chain.sizing.label}${
+            chain.sizing.targetRange
+              ? ` · 목표가 ${chain.sizing.targetRange.low.toFixed(2)}~${chain.sizing.targetRange.high.toFixed(2)}`
+              : ""
+          }</div>`;
+        }
+        html += `<div class="chartballoon__foot">세 계층은 병합되지 않은 개별 판정입니다(ipp-continuation-chain)</div>`;
+        html += `</div>`;
+      }
+
       openDetailPopup(key, html, arrowEl);
     },
-    [openDetailPopup, currency],
+    [openDetailPopup, currency, analysis],
   );
 
   // Elliott's checks apply to the whole 5-wave count, not to any one point —

@@ -23,6 +23,8 @@ import { detectHarmonic } from "@/lib/analysis/harmonic";
 import { ichimoku, type IchimokuResult } from "@/lib/analysis/ichimoku";
 import { elliottWave, type ElliottResult } from "@/lib/analysis/elliott";
 import { inflectionPoints, type InflectionResult } from "@/lib/analysis/inflection";
+import { smc, type SmcResult } from "@/lib/analysis/smc";
+import { ippContinuationChain, type IppChainResult } from "@/lib/analysis/ipp-chain";
 
 export interface AnalysisResult {
   symbol: string;
@@ -55,6 +57,11 @@ export interface AnalysisResult {
     ichimoku: IchimokuResult | null;
     elliottWave: ElliottResult | null;
     inflectionPoints: InflectionResult | null;
+    smc: SmcResult | null;
+    /** ipp-continuation-chain: IPP(반전 시점) -> smc(구조 확인) ->
+     * elliottWave(크기·기간) chained without merging into one score. Null
+     * when any of the three prerequisite results is unavailable. */
+    ippChain: IppChainResult | null;
   };
 }
 
@@ -74,6 +81,7 @@ const MIN_BARS = {
   bollinger: 20,
   ichimoku: 78, // 52 + 26
   elliott: 26, // enough for a few swing windows
+  smc: 20, // enough for a couple of swing windows (window 5, needs >=2 swings)
   patterns: 25,
 } as const;
 
@@ -141,6 +149,19 @@ export function analyze(input: AnalyzeInput): AnalysisResult {
   if (n >= MIN_BARS.patterns) inflectionResult = inflectionPoints(candles);
   else unavailable["advanced.inflectionPoints"] = `need ${MIN_BARS.patterns} candles, have ${n}`;
 
+  let smcResult: SmcResult | null = null;
+  if (n >= MIN_BARS.smc) smcResult = smc(candles);
+  else unavailable["advanced.smc"] = `need ${MIN_BARS.smc} candles, have ${n}`;
+
+  // ipp-continuation-chain: only runs once all three prerequisite modules
+  // produced a result — chaining through a null leg would just be guessing.
+  let ippChainResult: IppChainResult | null = null;
+  if (inflectionResult && smcResult && elliottResult) {
+    ippChainResult = ippContinuationChain(candles, inflectionResult, smcResult, elliottResult);
+  } else {
+    unavailable["advanced.ippChain"] = "requires inflectionPoints + smc + elliottWave all available";
+  }
+
   return {
     symbol: input.symbol,
     market: input.market,
@@ -167,6 +188,8 @@ export function analyze(input: AnalyzeInput): AnalysisResult {
       ichimoku: ichimokuResult,
       elliottWave: elliottResult,
       inflectionPoints: inflectionResult,
+      smc: smcResult,
+      ippChain: ippChainResult,
     },
   };
 }
