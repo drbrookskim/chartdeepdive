@@ -29,6 +29,7 @@ import {
   formatSigned,
   inflectionRuleLabel,
   inflectionRuleHint,
+  inflectionRuleExplain,
   patternKindLabel,
 } from "@/lib/format";
 
@@ -502,7 +503,9 @@ export default function ChartStack({
       const rulesHtml = p.signals
         .map((s) => {
           const hint = inflectionRuleHint(s.rule);
-          return `<li><b>${inflectionRuleLabel(s.rule)}${hint ? `(${hint})` : ""}</b> — ${s.detail}</li>`;
+          const explain = inflectionRuleExplain(s.rule);
+          const label = `${inflectionRuleLabel(s.rule)}${hint ? `(${hint})` : ""}`;
+          return `<li><b${explain ? ` title="${explain}"` : ""}>${label}</b> — ${s.detail}</li>`;
         })
         .join("");
       let html =

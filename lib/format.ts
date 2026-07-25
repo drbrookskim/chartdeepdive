@@ -154,6 +154,18 @@ export function inflectionRuleHint(rule: string): string | null {
   return INFLECTION_RULE_HINTS[rule] ?? null;
 }
 
+const DIVERGENCE_EXPLAIN: Record<string, string> = {
+  "rsi-divergence":
+    "다이버전스란 주가와 보조지표(RSI)의 움직임이 서로 반대로 어긋나는 현상으로, 추세가 힘을 잃고 조만간 방향이 바뀔 수 있다는 신호로 봅니다. 주가는 저점을 낮추는데 RSI는 저점을 높이면 상승 반전 신호(하락 에너지 소진), 주가는 고점을 높이는데 RSI는 고점을 낮추면 하락 반전 신호(상승 에너지 고갈)입니다.",
+  "obv-divergence":
+    "다이버전스란 주가와 보조지표(누적거래량 OBV)의 움직임이 서로 반대로 어긋나는 현상으로, 추세가 힘을 잃고 조만간 방향이 바뀔 수 있다는 신호로 봅니다. 주가는 저점을 낮추는데 OBV는 저점을 높이면 상승 반전 신호(하락 에너지 소진), 주가는 고점을 높이는데 OBV는 고점을 낮추면 하락 반전 신호(상승 에너지 고갈)입니다.",
+};
+
+/** Full divergence explanation for a hover tooltip; null for non-divergence rules. */
+export function inflectionRuleExplain(rule: string): string | null {
+  return DIVERGENCE_EXPLAIN[rule] ?? null;
+}
+
 export function signalText(signal: 1 | -1 | 0): {
   label: string;
   cls: "up" | "down" | "neutral";
