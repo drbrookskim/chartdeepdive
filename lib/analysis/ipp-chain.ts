@@ -15,6 +15,7 @@ import type { Candle } from "@/lib/schema";
 import type { InflectionPoint, InflectionResult } from "@/lib/analysis/inflection";
 import type { SmcResult } from "@/lib/analysis/smc";
 import type { ElliottResult } from "@/lib/analysis/elliott";
+import { formatPrice } from "@/lib/format";
 
 // An IPP point further back than this from the last candle isn't "the
 // current signal" anymore — it's just backtest history. inflectionPoints()
@@ -51,9 +52,9 @@ export interface IppChainResult {
 }
 
 /** "종가 X가 Y(날짜)를 상향/하향 돌파" — the sentence shared by BOS/ChoCH detail text. */
-function breakSentence(dirKr: string, event: NonNullable<SmcResult["event"]>): string {
+function breakSentence(event: NonNullable<SmcResult["event"]>, currency: string): string {
   const verb = event.direction === "up" ? "상향" : "하향";
-  return `${event.date} 종가 ${event.price.toFixed(2)}가 직전 전환점 ${event.brokenLevel.price.toFixed(2)}(${event.brokenLevel.date})를 ${verb} 돌파`;
+  return `${event.date} 종가 ${formatPrice(event.price, currency)}가 직전 전환점 ${formatPrice(event.brokenLevel.price, currency)}(${event.brokenLevel.date})를 ${verb} 돌파`;
 }
 
 function ippLine(anchor: InflectionPoint | null): string {
@@ -67,11 +68,11 @@ function structureLine(s: ChainStructure | null): string {
   return `[구조 확인]      시장 구조: ${s.label} — ${s.detail}`;
 }
 
-function sizingLine(s: ChainSizing | null): string {
+function sizingLine(s: ChainSizing | null, currency: string): string {
   if (!s) return "[크기·기간]      엘리엇 파동: (평가 안 함 — 구조 미확인)";
   if (!s.available) return `[크기·기간]      엘리엇 파동: ${s.label} — ${s.detail}`;
   const r = s.targetRange!;
-  return `[크기·기간]      엘리엇 파동: ${s.label}, 되돌림 목표가 범위 ${r.low.toFixed(2)}~${r.high.toFixed(2)}`;
+  return `[크기·기간]      엘리엇 파동: ${s.label}, 되돌림 목표가 범위 ${formatPrice(r.low, currency)}~${formatPrice(r.high, currency)}`;
 }
 
 export function ippContinuationChain(
@@ -79,6 +80,7 @@ export function ippContinuationChain(
   ipp: InflectionResult,
   smcResult: SmcResult,
   elliott: ElliottResult,
+  currency: string,
 ): IppChainResult {
   const last = ipp.points[ipp.points.length - 1] ?? null;
   const lastIdx = last ? candles.findIndex((c) => c.date === last.date) : -1;
@@ -109,13 +111,13 @@ export function ippContinuationChain(
     structure = {
       status: "confirmed",
       label: "구조 확인",
-      detail: `추세 방향이 실제로 ${anchorDirKr}으로 바뀌는 전환이 확인됨 — ${breakSentence(anchorDirKr, smcResult.event)}, 변곡점 예측과 같은 방향`,
+      detail: `추세 방향이 실제로 ${anchorDirKr}으로 바뀌는 전환이 확인됨 — ${breakSentence(smcResult.event, currency)}, 변곡점 예측과 같은 방향`,
     };
   } else if (smcResult.event.type === "BOS" && smcResult.event.direction !== anchor.direction) {
     structure = {
       status: "unconfirmed",
       label: "미확인 — 페이크아웃 가능성",
-      detail: `기존 추세가 아직 이어지는 중(추세 지속 돌파) — ${breakSentence(anchorDirKr, smcResult.event)}, 변곡점 예측이 찍은 반전이 구조적으로는 아직 깨지지 않음`,
+      detail: `기존 추세가 아직 이어지는 중(추세 지속 돌파) — ${breakSentence(smcResult.event, currency)}, 변곡점 예측이 찍은 반전이 구조적으로는 아직 깨지지 않음`,
     };
   } else {
     const eventDirKr = smcResult.event.direction === "up" ? "상승" : "하락";
@@ -130,7 +132,7 @@ export function ippContinuationChain(
     const summary = [
       ippLine(anchor),
       structureLine(structure),
-      sizingLine(null),
+      sizingLine(null, currency),
       "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
       `종합 해석: 변곡점 예측이 ${anchor.date}에 ${anchorDirKr} 반전을 찍었지만, 시장 구조 확인 결과가 "${structure.label}"이라 목표가 단계로는 넘어가지 않습니다.`,
     ].join("\n");
@@ -168,18 +170,18 @@ export function ippContinuationChain(
           ? `상승 5개 파동 완료, 하락 되돌림 구간 진입 가능성${supportsAnchor ? " (변곡점 예측의 하락 반전과 부합)" : ""}`
           : `하락 5개 파동 완료, 반등 되돌림 구간 진입 가능성${supportsAnchor ? " (변곡점 예측의 상승 반전과 부합)" : ""}`,
       targetRange,
-      detail: `파동 시작점 ${start.date}(${start.price.toFixed(2)})부터 5번째 파동 ${wave5.date}(${wave5.price.toFixed(2)})까지 움직인 구간을 기준으로, 그중 38.2%~61.8%만큼 되돌아올 것으로 추정한 가격대`,
+      detail: `파동 시작점 ${start.date}(${formatPrice(start.price, currency)})부터 5번째 파동 ${wave5.date}(${formatPrice(wave5.price, currency)})까지 움직인 구간을 기준으로, 그중 38.2%~61.8%만큼 되돌아올 것으로 추정한 가격대`,
     };
   }
 
   const summary = [
     ippLine(anchor),
     structureLine(structure),
-    sizingLine(sizing),
+    sizingLine(sizing, currency),
     "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
     `종합 해석: 변곡점 예측이 ${anchor.date}에 ${anchorDirKr} 반전을 찍었고, 시장 구조로도 확인됐습니다. ` +
       (sizing.available
-        ? `엘리엇 파동 분석 결과 ${sizing.label} — 목표가 범위는 ${sizing.targetRange!.low.toFixed(2)}~${sizing.targetRange!.high.toFixed(2)}입니다.`
+        ? `엘리엇 파동 분석 결과 ${sizing.label} — 목표가 범위는 ${formatPrice(sizing.targetRange!.low, currency)}~${formatPrice(sizing.targetRange!.high, currency)}입니다.`
         : `다만 엘리엇 파동 카운트가 불확실해 목표가·기간은 제공하지 않습니다.`),
   ].join("\n");
 

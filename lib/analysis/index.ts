@@ -157,7 +157,7 @@ export function analyze(input: AnalyzeInput): AnalysisResult {
   // produced a result — chaining through a null leg would just be guessing.
   let ippChainResult: IppChainResult | null = null;
   if (inflectionResult && smcResult && elliottResult) {
-    ippChainResult = ippContinuationChain(candles, inflectionResult, smcResult, elliottResult);
+    ippChainResult = ippContinuationChain(candles, inflectionResult, smcResult, elliottResult, input.currency);
   } else {
     unavailable["advanced.ippChain"] = "requires inflectionPoints + smc + elliottWave all available";
   }

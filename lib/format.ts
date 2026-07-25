@@ -13,11 +13,11 @@ export function formatPrice(value: number, currency: string): string {
 }
 
 /** Main chart's price-axis labels: KRW shows the full won amount as a whole
- * integer (no decimals, since won has none); other currencies keep the
- * axis's own default formatting untouched. */
+ * integer (won has no subunit in practice), other currencies always show 2
+ * decimal places (cents) — same rule as formatPrice above. */
 export function formatAxisPrice(value: number, currency: string): string {
-  if (currency !== "KRW") return value.toLocaleString();
-  return Math.round(value).toLocaleString("ko-KR");
+  if (currency === "KRW") return Math.round(value).toLocaleString("ko-KR");
+  return value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 export function formatSigned(value: number, digits = 2): string {

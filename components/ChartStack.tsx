@@ -519,7 +519,7 @@ export default function ChartStack({
         if (chain.sizing) {
           html += `<div class="chartballoon__chain-row"><b>확인됐다면 얼마나 갈 것으로 보이는가(엘리엇 파동 분석)</b><br>${chain.sizing.label}${
             chain.sizing.targetRange
-              ? ` · 예상 목표가 ${chain.sizing.targetRange.low.toFixed(2)}~${chain.sizing.targetRange.high.toFixed(2)}`
+              ? ` · 예상 목표가 ${formatPrice(chain.sizing.targetRange.low, currency)}~${formatPrice(chain.sizing.targetRange.high, currency)}`
               : ""
           }</div>`;
         }
