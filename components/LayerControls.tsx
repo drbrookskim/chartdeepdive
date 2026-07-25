@@ -319,14 +319,14 @@ export default function LayerControls({
           {analysis?.advanced.ippChain?.anchor && (
             <div
               className="note-line"
-              title="IPP(변곡 시점) -> SMC(구조 확인) -> Elliott(목표가) 체이닝 — 하나의 점수로 합치지 않고 각 계층을 그대로 나열합니다. 가장 최근 변곡점 화살표를 클릭하면 확인 가능."
+              title="IPP(변곡 시점) -> SMC(구조 확인) -> Elliott(목표가) 체이닝 — 하나의 점수로 합치지 않고 각 계층을 그대로 나열합니다. 가장 최근 변곡점 화살표를 클릭하면 볼 수 있습니다."
             >
               ⓘ 최근 변곡점에 구조 확인·목표가 체인 적용됨 — 화살표 클릭
             </div>
           )}
           <div className="note-line">
             데이터 부족·미구현 지표는 숨기지 않고 항상 사유를 표시합니다. 고급 기법은
-            한 번에 하나만 켜는 것을 권장합니다.
+            한 번에 하나만 켜는 편이 좋습니다.
           </div>
         </div>
         )}

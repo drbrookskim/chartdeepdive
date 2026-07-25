@@ -47,7 +47,7 @@ export default function SearchBox({
     } catch (e) {
       if (e instanceof DOMException && e.name === "AbortError") return;
       const msg =
-        e instanceof ApiCallError && e.code === "BAD_REQUEST" ? null : "검색을 불러오지 못했습니다.";
+        e instanceof ApiCallError && e.code === "BAD_REQUEST" ? null : "검색 결과를 불러오지 못했습니다.";
       setError(msg);
       setResults([]);
     } finally {

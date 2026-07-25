@@ -19,7 +19,7 @@ export default function AuthPromptModal({
           ×
         </button>
         <div className="logoutmodal__name">Chart Deep Dive</div>
-        <div className="logoutmodal__question">차별화된 차트 분석 서비스를 만끽하세요.</div>
+        <div className="logoutmodal__question">차별화된 차트 분석을 경험해 보세요.</div>
         <button className="googlesignin" onClick={() => signIn("google")}>
           <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
             <path

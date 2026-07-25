@@ -469,7 +469,7 @@ function ChartInner() {
             {analysisError && (
               <div className="note-line" style={{ paddingBottom: 10 }}>
                 분석 결과를 불러오지 못했습니다({analysisError.code}). 캔들은 정상
-                표시되며, 지표/패턴/고급 기법은 일시적으로 비활성입니다.
+                표시되며 지표/패턴/고급 기법만 일시적으로 비활성입니다.
               </div>
             )}
             <ChartStack

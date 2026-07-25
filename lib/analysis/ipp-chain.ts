@@ -170,7 +170,7 @@ export function ippContinuationChain(
           ? `상승 5개 파동 완료, 하락 되돌림 구간 진입 가능성${supportsAnchor ? " (변곡점 예측의 하락 반전과 부합)" : ""}`
           : `하락 5개 파동 완료, 반등 되돌림 구간 진입 가능성${supportsAnchor ? " (변곡점 예측의 상승 반전과 부합)" : ""}`,
       targetRange,
-      detail: `파동 시작점 ${start.date}(${formatPrice(start.price, currency)})부터 5번째 파동 ${wave5.date}(${formatPrice(wave5.price, currency)})까지 움직인 구간을 기준으로, 그중 38.2%~61.8%만큼 되돌아올 것으로 추정한 가격대`,
+      detail: `파동 시작점 ${start.date}(${formatPrice(start.price, currency)})부터 5번째 파동 ${wave5.date}(${formatPrice(wave5.price, currency)})까지 움직인 구간에서, 그중 38.2%~61.8%만큼 되돌아올 것으로 추정한 가격대`,
     };
   }
 

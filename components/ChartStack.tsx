@@ -523,7 +523,7 @@ export default function ChartStack({
               : ""
           }</div>`;
         }
-        html += `<div class="chartballoon__foot">위 세 항목은 서로 다른 질문에 대한 답이라 하나의 점수로 합치지 않고 각각 보여줍니다</div>`;
+        html += `<div class="chartballoon__foot">위 세 항목은 서로 다른 질문의 답이라 하나의 점수로 합치지 않고 따로 보여줍니다</div>`;
         html += `</div>`;
       }
 
