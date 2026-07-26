@@ -509,7 +509,7 @@ export default function ChartStack({
         })
         .join("");
       let html =
-        `<div class="chartballoon__head">${p.date} · ${p.direction === "up" ? "상승 전환" : "하락 전환"} · 신뢰점수 ${p.confidence.toFixed(2)}(부합 규칙의 가중치를 더한 값, 확률 아님)</div>` +
+        `<div class="chartballoon__head">${p.date} · ${p.direction === "up" ? "상승 전환" : "하락 전환"} · 신뢰점수 ${p.confidence.toFixed(2)}(해당하는 신호들의 점수를 더한 값, 확률 아님)</div>` +
         `<div class="chartballoon__sub">${formatPrice(p.price, currency)}</div>` +
         `<ul class="chartballoon__rules">${rulesHtml}</ul>` +
         `<div class="chartballoon__foot">${p.signals.length}개 규칙 부합</div>`;

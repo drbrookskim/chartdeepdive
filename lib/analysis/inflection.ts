@@ -99,7 +99,7 @@ export function inflectionPoints(candles: Candle[]): InflectionResult {
         score += WEIGHTS.rsiDiv;
         signals.push({
           rule: "rsi-divergence",
-          detail: `가격은 직전 ${piv.type === "peak" ? "고점" : "저점"} 대비 ${priceUp ? "상승" : "하락"}했으나 RSI는 ${rsiUp ? "상승" : "하락"}(다이버전스)`,
+          detail: `가격은 이전 ${piv.type === "peak" ? "고점" : "저점"}보다 ${priceUp ? "올랐는데" : "내렸는데"} RSI는 반대로 ${rsiUp ? "올라감" : "내려감"}`,
         });
       }
     }
@@ -110,20 +110,23 @@ export function inflectionPoints(candles: Candle[]): InflectionResult {
       score += WEIGHTS.obvDiv;
       signals.push({
         rule: "obv-divergence",
-        detail: `가격은 직전 ${piv.type === "peak" ? "고점" : "저점"} 대비 ${priceUp ? "상승" : "하락"}했으나 OBV는 ${obvUp ? "상승" : "하락"}(다이버전스)`,
+        detail: `가격은 이전 ${piv.type === "peak" ? "고점" : "저점"}보다 ${priceUp ? "올랐는데" : "내렸는데"} 누적거래량(OBV)은 반대로 ${obvUp ? "올라감" : "내려감"}`,
       });
     }
 
     if (Math.abs(volZ[i]) >= VOLUME_Z) {
       score += WEIGHTS.volume;
-      signals.push({ rule: "volume-anomaly", detail: `거래량 z-score ${volZ[i].toFixed(2)} (이상 급증)` });
+      signals.push({
+        rule: "volume-anomaly",
+        detail: `평소 거래량과 비교했을 때 크게 벗어난 수준으로 급증함(이상치 점수 ${volZ[i].toFixed(2)})`,
+      });
     }
 
     if (squeeze.slice(Math.max(0, i - 5), i + 1).some(Boolean)) {
       score += WEIGHTS.bbSqueeze;
       signals.push({
         rule: "bb-squeeze",
-        detail: `최근 ${SQUEEZE_WINDOW}봉 중 볼린저밴드 폭이 하위 ${SQUEEZE_PERCENTILE * 100}%로 수축(스퀴즈)`,
+        detail: `최근 ${SQUEEZE_WINDOW}봉 중 가격 변동폭이 하위 ${SQUEEZE_PERCENTILE * 100}% 수준으로 크게 좁아짐(변동성 축소)`,
       });
     }
 
