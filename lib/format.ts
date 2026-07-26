@@ -132,10 +132,10 @@ export function categoryColorVar(category: string): string {
 }
 
 const INFLECTION_RULE_LABELS: Record<string, string> = {
-  "volume-anomaly": "거래량이상",
-  "rsi-divergence": "RSI다이버전스",
-  "obv-divergence": "OBV다이버전스",
-  "bb-squeeze": "BB스퀴즈",
+  "volume-anomaly": "거래량 이상 급증",
+  "rsi-divergence": "RSI(상대강도지수) 다이버전스",
+  "obv-divergence": "OBV(누적거래량) 다이버전스",
+  "bb-squeeze": "볼린저밴드(BB) 스퀴즈",
 };
 
 export function inflectionRuleLabel(rule: string): string {
@@ -144,8 +144,8 @@ export function inflectionRuleLabel(rule: string): string {
 
 const INFLECTION_RULE_HINTS: Record<string, string> = {
   "volume-anomaly": "거래량이 평소보다 갑자기 크게 늘어남",
-  "rsi-divergence": "가격과 RSI가 서로 반대 방향으로 움직임",
-  "obv-divergence": "가격과 누적거래량(OBV)이 서로 반대 방향으로 움직임",
+  "rsi-divergence": "가격이 오르내리는 힘(모멘텀)이 가격과 반대로 움직이는 어긋남",
+  "obv-divergence": "실제 매수·매도 자금 흐름이 가격과 반대로 움직이는 어긋남",
   "bb-squeeze": "가격 변동폭이 크게 줄어든 상태",
 };
 
@@ -156,9 +156,9 @@ export function inflectionRuleHint(rule: string): string | null {
 
 const DIVERGENCE_EXPLAIN: Record<string, string> = {
   "rsi-divergence":
-    "다이버전스: 주가와 RSI가 서로 다른 방향으로 움직이는 현상. 지금 추세가 힘을 잃고 있다는 신호로 봅니다. 주가는 계속 내려가는데 RSI는 오히려 올라가면 → 곧 오를 수 있다는 신호. 주가는 계속 올라가는데 RSI는 오히려 내려가면 → 곧 내릴 수 있다는 신호.",
+    "다이버전스란 주가와 지표가 서로 다른 방향으로 어긋나 움직이는 현상입니다. RSI(상대강도지수, 가격이 오르내리는 힘·속도를 0~100 숫자로 나타낸 지표)가 주가와 반대로 움직이면 지금 추세가 힘을 잃고 있다는 신호로 봅니다. 주가는 계속 내려가는데 RSI는 오히려 올라가면 → 곧 오를 수 있다는 신호. 주가는 계속 올라가는데 RSI는 오히려 내려가면 → 곧 내릴 수 있다는 신호.",
   "obv-divergence":
-    "다이버전스: 주가와 누적거래량(OBV)이 서로 다른 방향으로 움직이는 현상. 지금 추세가 힘을 잃고 있다는 신호로 봅니다. 주가는 계속 내려가는데 OBV는 오히려 올라가면 → 곧 오를 수 있다는 신호. 주가는 계속 올라가는데 OBV는 오히려 내려가면 → 곧 내릴 수 있다는 신호.",
+    "다이버전스란 주가와 지표가 서로 다른 방향으로 어긋나 움직이는 현상입니다. OBV(누적거래량, 오른 날 거래량은 더하고 내린 날 거래량은 빼서 누적한 지표로 실제 매수·매도 자금 흐름을 나타냄)가 주가와 반대로 움직이면 지금 추세가 힘을 잃고 있다는 신호로 봅니다. 주가는 계속 내려가는데 OBV는 오히려 올라가면 → 곧 오를 수 있다는 신호. 주가는 계속 올라가는데 OBV는 오히려 내려가면 → 곧 내릴 수 있다는 신호.",
 };
 
 /** Full divergence explanation for a hover tooltip; null for non-divergence rules. */

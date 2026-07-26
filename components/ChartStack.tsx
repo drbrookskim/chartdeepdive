@@ -47,14 +47,14 @@ const NEON = "#39ff14";
  * ("힘"), OBV reads money flow ("거래량"), and comparing the two filters out
  * false signals. Own wording, not a reproduction of any single source. */
 const DIVERGENCE_DEEPDIVE_HTML =
-  `<details class="chartballoon__details"><summary>RSI vs OBV 다이버전스, 뭐가 다른가</summary>` +
+  `<details class="chartballoon__details"><summary>RSI 다이버전스 vs OBV 다이버전스, 뭐가 다른가</summary>` +
   `<div class="chartballoon__detailsbody">` +
-  `<p>RSI는 가격이 오르내리는 <b>속도와 힘(모멘텀)</b>을 보고, OBV는 그 뒤에 실제로 붙은 <b>돈(거래량)</b>을 봅니다. 둘 다 다이버전스가 뜨면 가격만으론 안 보이던 추세의 진짜 힘 빠짐/힘 실림을 잡아낼 수 있습니다.</p>` +
-  `<p><b>RSI다이버전스</b> — 단기 추세 피로도를 잘 잡아냄. 가격은 계속 가는데 오르내리는 힘 자체가 약해지고 있다는 신호.</p>` +
-  `<p><b>OBV다이버전스</b> — 거래량은 상대적으로 속이기 어려워 신뢰도가 더 높은 편. 가격은 오르는데 실제 사들이는 돈은 줄고 있다면(혹은 그 반대라면) 세력 매집·이탈 정황으로 해석.</p>` +
-  `<p><b>상승 다이버전스(매수 쪽 신호)</b> — 가격 저점은 낮아지는데 지표(RSI/OBV) 저점은 오히려 높아지는 형태. 파는 힘이 빠졌거나(RSI), 저가에 몰래 매집이 들어오고 있다는(OBV) 뜻으로 봅니다.</p>` +
+  `<p><b>다이버전스(divergence)</b>란 가격과 지표가 서로 반대 방향으로 어긋나 움직이는 현상을 말합니다. <b>RSI(상대강도지수)</b>는 가격이 오르내리는 <b>속도와 힘(모멘텀)</b>을 재고, <b>OBV(누적거래량)</b>는 오른 날 거래량은 더하고 내린 날 거래량은 빼서 누적한 값으로 <b>실제 매수·매도 자금 흐름</b>을 봅니다. 둘 다 다이버전스가 뜨면 가격만으론 안 보이던 추세의 진짜 힘 빠짐·힘 실림을 잡아낼 수 있습니다.</p>` +
+  `<p><b>RSI 다이버전스</b> — 단기 추세 피로도를 잘 잡아냄. 가격은 계속 가는데 오르내리는 힘 자체가 약해지고 있다는 신호.</p>` +
+  `<p><b>OBV 다이버전스</b> — 거래량은 상대적으로 속이기 어려워 신뢰도가 더 높은 편. 가격은 오르는데 실제 사들이는 돈은 줄고 있다면(혹은 그 반대라면) 세력 매집·이탈 정황으로 해석.</p>` +
+  `<p><b>상승 다이버전스(매수 쪽 신호)</b> — 가격 저점은 낮아지는데 지표(RSI·OBV) 저점은 오히려 높아지는 형태. 파는 힘이 빠졌거나(RSI), 저가에 몰래 매집이 들어오고 있다는(OBV) 뜻으로 봅니다.</p>` +
   `<p><b>하락 다이버전스(매도 쪽 신호)</b> — 가격 고점은 높아지는데 지표 고점은 오히려 낮아지는 형태. 오르는 힘이 고갈됐거나(RSI), 물량이 빠져나가고 있다는(OBV) 뜻으로 봅니다.</p>` +
-  `<p>다이버전스는 속임수(false signal)가 섞일 수 있어 단독으로는 확정 신호가 아닙니다. RSI와 OBV가 같은 방향으로 동시에 뜨면(가격 저점/고점이 낮아지거나 높아지는데 둘 다 반대로 움직이면) 신뢰도가 크게 올라가고, 일반적으로 OBV 쪽이 RSI보다 속임수가 적은 편이라 RSI 신호가 뜨면 OBV 방향도 같이 확인하는 게 좋습니다.</p>` +
+  `<p>다이버전스는 속임수(false signal)가 섞일 수 있어 단독으로는 확정 신호가 아닙니다. RSI와 OBV가 같은 방향으로 동시에 뜨면(가격 저점·고점이 낮아지거나 높아지는데 둘 다 반대로 움직이면) 신뢰도가 크게 올라가고, 일반적으로 OBV 쪽이 RSI보다 속임수가 적은 편이라 RSI 신호가 뜨면 OBV 방향도 같이 확인하는 게 좋습니다.</p>` +
   `</div></details>`;
 
 function placeChartBalloon(popup: HTMLDivElement, x: number, anchorTop: number) {
@@ -537,9 +537,13 @@ export default function ChartStack({
         .map((s) => `${inflectionRuleLabel(s.rule)} ${RULE_WEIGHTS[s.rule].toFixed(2)}`)
         .join(" + ");
       const scoreExplain =
-        `신뢰점수는 확률이 아니라, 규칙마다 미리 정해둔 점수(거래량이상 0.25 · RSI다이버전스 0.30 · ` +
-        `OBV다이버전스 0.25 · BB스퀴즈 0.20, 다 더하면 만점 1.00)를 그중 해당하는 규칙만 더한 값입니다. ` +
+        `신뢰점수는 확률이 아니라, 규칙마다 미리 정해둔 점수(거래량 이상 급증 0.25 · RSI(상대강도지수) 다이버전스 0.30 · ` +
+        `OBV(누적거래량) 다이버전스 0.25 · 볼린저밴드(BB) 스퀴즈 0.20, 다 더하면 만점 1.00)를 그중 해당하는 규칙만 더한 값입니다. ` +
         `이 지점은 ${scoreBreakdown} = ${p.confidence.toFixed(2)}.`;
+      const dirKr = p.direction === "up" ? "상승" : "하락";
+      const meaningLine =
+        `<div class="chartballoon__sub">이 지점에서 <b>${dirKr} 반전 가능성</b>을 알리는 신호가 ${p.signals.length}가지 겹쳤고, ` +
+        `그 근거를 점수로 환산하면 <b>${p.confidence.toFixed(2)}점</b>입니다(만점 1.00). 아래 근거를 보고 이 신호를 얼마나 믿을지 스스로 판단하는 데 쓰세요.</div>`;
 
       // Where this point's score sits among every point this stock produced —
       // min/max/percentile, computed from the live analysis result rather
@@ -562,10 +566,12 @@ export default function ChartStack({
       const interpretNote =
         `<div class="chartballoon__foot">※ 이 신호는 과거 이 시점 기준으로 국소적인 전환을 사후 확인한 것이며, ` +
         `실시간 예측이 아닙니다. 점수가 낮을수록(0.50에 가까울수록) 약한 신호이며, 이후 더 큰 추세에 묻혀 ` +
-        `반대로 흘러갈 수 있습니다.</div>`;
+        `반대로 흘러갈 수 있습니다. <b>그래서:</b> 이 신호 하나만 보고 매매를 결정하지 말고, 아래 "시장 구조로도 ` +
+        `확인되는가"와 점수·근거를 함께 보고 판단하세요.</div>`;
 
       let html =
         `<div class="chartballoon__head">${p.date} · ${p.direction === "up" ? "상승 전환" : "하락 전환"} · <span title="${scoreExplain}">신뢰점수 ${p.confidence.toFixed(2)}</span></div>` +
+        meaningLine +
         `<div class="chartballoon__sub">${formatPrice(p.price, currency)}</div>` +
         `<ul class="chartballoon__rules">${rulesHtml}</ul>` +
         (hasDivergence ? DIVERGENCE_DEEPDIVE_HTML : "") +
