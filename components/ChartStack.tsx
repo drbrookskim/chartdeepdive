@@ -327,6 +327,13 @@ export default function ChartStack({
   const volumeProfileRef = useRef<SVGSVGElement>(null);
   const ohlcRef = useRef<HTMLDivElement>(null);
   const arrowsContainerRef = useRef<HTMLDivElement>(null);
+  // Detail popup lives in its own overlay, NOT inside .patternarrows —
+  // .patternarrows has overflow:hidden (needed to clip arrows/lines at the
+  // price-axis gutter) which was silently cutting off tall popups (the
+  // chain block pushed content past the chart pane's height). Same
+  // top-left origin as .patternarrows (both inset:0 on .panel__chart), so
+  // anchor coordinates carry over unchanged.
+  const popupLayerRef = useRef<HTMLDivElement>(null);
   // User-drawn horizontal/trend lines (see the drawing-tool toolbar below).
   // Data lives in refs (not state) since drawing them is imperative chart-API
   // work, not something React needs to re-render for; `drawMode` (toolbar
@@ -482,7 +489,7 @@ export default function ChartStack({
         closeDetailPopup();
         return;
       }
-      const container = arrowsContainerRef.current;
+      const container = popupLayerRef.current;
       if (!container) return;
       let popup = detailPopupRef.current;
       if (!popup) {
@@ -2485,6 +2492,7 @@ export default function ChartStack({
           <svg ref={userLinesRef} className="userlines" />
           <svg ref={hLabelsRef} className="userlines" />
           <div ref={arrowsContainerRef} className="patternarrows" />
+          <div ref={popupLayerRef} className="chartballoon-layer" />
         </div>
         <div
           className="resizehandle"

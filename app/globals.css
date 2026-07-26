@@ -1105,6 +1105,15 @@ button {
   pointer-events: none;
   z-index: 4;
 }
+/* holds only .chartballoon — deliberately NOT overflow:hidden like
+   .patternarrows above, so a tall popup can extend past the chart pane
+   instead of being clipped. */
+.chartballoon-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 7;
+}
 
 /* a small arrow that keeps bobbing up/down in place for as long as its
    pattern stays checked (removed from the DOM when unchecked) */
@@ -1145,6 +1154,8 @@ button {
   position: absolute;
   transform: translate(-50%, -100%);
   width: min(330px, calc(100vw - 24px)); /* 220px x1.5 — chain block added long-form Korean sentences */
+  max-height: min(420px, calc(100vh - 24px));
+  overflow-y: auto;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
