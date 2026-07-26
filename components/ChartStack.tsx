@@ -1870,6 +1870,7 @@ export default function ChartStack({
         color: cssVar("--harmonic"),
         lineWidth: 2,
         priceLineVisible: false,
+        priceFormat: { type: "price", precision: 0, minMove: 1 },
       });
       rsiSeriesRef.current = rsiSeries;
       rsiSeries.setData(toLineWithGaps(dates, analysis.indicators.rsi.values));
@@ -1899,7 +1900,10 @@ export default function ChartStack({
       });
       charts.push(macdChart);
       macdApiRef.current = macdChart;
-      const hist = macdChart.addHistogramSeries({ priceLineVisible: false });
+      const hist = macdChart.addHistogramSeries({
+        priceLineVisible: false,
+        priceFormat: { type: "price", precision: 0, minMove: 1 },
+      });
       hist.setData(
         toLineWithGaps(dates, m.histogram).map((d) =>
           "value" in d ? { ...d, color: d.value >= 0 ? `${up}99` : `${down}99` } : d,
@@ -1909,12 +1913,14 @@ export default function ChartStack({
         color: cssVar("--accent"),
         lineWidth: 1,
         priceLineVisible: false,
+        priceFormat: { type: "price", precision: 0, minMove: 1 },
       });
       macdLine.setData(toLineWithGaps(dates, m.macd));
       const sigLine = macdChart.addLineSeries({
         color: cssVar("--gapcat"),
         lineWidth: 1,
         priceLineVisible: false,
+        priceFormat: { type: "price", precision: 0, minMove: 1 },
       });
       sigLine.setData(toLineWithGaps(dates, m.signal));
       // NOT fitContent() here either — see the RSI block above.
@@ -1933,6 +1939,7 @@ export default function ChartStack({
         color: cssVar("--gapcat"),
         lineWidth: 2,
         priceLineVisible: false,
+        priceFormat: { type: "price", precision: 0, minMove: 1 },
       });
       obvSeriesRef.current = obvSeries;
       obvSeries.setData(toLineWithGaps(dates, analysis.indicators.obv.values));
@@ -2757,9 +2764,9 @@ export default function ChartStack({
       {layers.rsi && (
         <div className={`panel ${layers.macd && activeSubTab !== "rsi" ? "subtab-hidden" : ""}`}>
           <div className="panel__label">
-            <span>RSI (14)</span>
+            <span>RSI(상대강도지수) (14)</span>
             <span className="v">
-              {lastNonNull(analysis?.indicators.rsi?.values)?.toFixed(2) ?? "—"}
+              {lastNonNull(analysis?.indicators.rsi?.values)?.toFixed(0) ?? "—"}
             </span>
           </div>
           <div className="panel__chart">
@@ -2775,10 +2782,10 @@ export default function ChartStack({
       {layers.macd && (
         <div className={`panel ${layers.rsi && activeSubTab !== "macd" ? "subtab-hidden" : ""}`}>
           <div className="panel__label">
-            <span>MACD (12,26,9)</span>
+            <span>MACD(이동평균수렴확산) (12,26,9)</span>
             <span className="v">
-              MACD {lastNonNull(analysis?.indicators.macd?.macd)?.toFixed(2) ?? "—"} ·
-              Signal {lastNonNull(analysis?.indicators.macd?.signal)?.toFixed(2) ?? "—"}
+              MACD {lastNonNull(analysis?.indicators.macd?.macd)?.toFixed(0) ?? "—"} ·
+              Signal {lastNonNull(analysis?.indicators.macd?.signal)?.toFixed(0) ?? "—"}
             </span>
           </div>
           <div className="panel__chart">

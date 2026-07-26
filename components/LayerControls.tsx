@@ -183,7 +183,7 @@ export default function LayerControls({
             onClick={() => onLayer("volumeProfile")}
           />
           <CheckRow
-            label="RSI"
+            label="RSI(상대강도지수)"
             sub="서브패널"
             checked={layers.rsi}
             disabled={!ind?.rsi}
@@ -191,7 +191,7 @@ export default function LayerControls({
             onClick={() => onLayer("rsi")}
           />
           <CheckRow
-            label="MACD"
+            label="MACD(이동평균수렴확산)"
             sub="서브패널"
             checked={layers.macd}
             disabled={!ind?.macd}
