@@ -341,6 +341,7 @@ export default function ChartStack({
   const cloudRef = useRef<SVGSVGElement>(null);
   const patternLinesRef = useRef<SVGSVGElement>(null);
   const userLinesRef = useRef<SVGSVGElement>(null);
+  const trendPreviewRef = useRef<SVGSVGElement>(null);
   const mainDivergenceLinesRef = useRef<SVGSVGElement>(null);
   const hLabelsRef = useRef<SVGSVGElement>(null);
   const volumeProfileRef = useRef<SVGSVGElement>(null);
@@ -366,7 +367,10 @@ export default function ChartStack({
   const drawModeRef = useRef<typeof drawMode>(null);
   useEffect(() => {
     drawModeRef.current = drawMode;
-    if (drawMode !== "trend") trendPendingRef.current = null;
+    if (drawMode !== "trend") {
+      trendPendingRef.current = null;
+      if (trendPreviewRef.current) trendPreviewRef.current.innerHTML = "";
+    }
   }, [drawMode]);
   const [, setDrawingsTick] = useState(0);
   // Brief visual "pressed" flash on the 전체 지우기 button after a real click
@@ -2172,6 +2176,7 @@ export default function ChartStack({
       } else {
         trendsRef.current.push({ id: ++drawingIdRef.current, p1: trendPendingRef.current, p2: point });
         trendPendingRef.current = null;
+        if (trendPreviewRef.current) trendPreviewRef.current.innerHTML = "";
         drawUserLines();
         setDrawingsTick((t) => t + 1);
         saveLines();
@@ -2284,10 +2289,43 @@ export default function ChartStack({
         dragRef.current = hit;
       }, LONG_PRESS_MS);
     };
+    // Live rubber-band line from the first trend-line click to the current
+    // cursor, so the user sees where the line will land before the second
+    // click — a single reused <line> in its own overlay (not userLinesRef,
+    // which drawUserLines() prunes to exactly trendsRef.current.length).
+    const updateTrendPreview = (mx: number, my: number) => {
+      const svg = trendPreviewRef.current;
+      if (!svg) return;
+      const pending = trendPendingRef.current;
+      if (drawModeRef.current !== "trend" || !pending) {
+        svg.innerHTML = "";
+        return;
+      }
+      const x1 = main.timeScale().timeToCoordinate(pending.time);
+      const y1 = candleSeriesRef.current?.priceToCoordinate(pending.price);
+      if (x1 == null || y1 == null) {
+        svg.innerHTML = "";
+        return;
+      }
+      let line = svg.firstChild as SVGLineElement | null;
+      if (!line) {
+        line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        line.setAttribute("stroke", NEON);
+        line.setAttribute("stroke-width", "2");
+        line.setAttribute("stroke-dasharray", "4 3");
+        svg.appendChild(line);
+      }
+      line.setAttribute("x1", String(x1));
+      line.setAttribute("y1", String(y1));
+      line.setAttribute("x2", String(mx));
+      line.setAttribute("y2", String(my));
+    };
+
     const onDrawMouseMove = (e: PointerEvent) => {
       const series = candleSeriesRef.current;
       const drag = dragRef.current;
       const { x, y } = localXY(e);
+      if (!drag) updateTrendPreview(x, y);
       if (mouseDownPosRef.current) {
         const moved = Math.hypot(x - mouseDownPosRef.current.x, y - mouseDownPosRef.current.y) > MOVE_CANCEL_PX;
         if (moved) {
@@ -2720,6 +2758,7 @@ export default function ChartStack({
           <svg ref={patternLinesRef} className="patternlines" />
           <svg ref={mainDivergenceLinesRef} className="divergencelines" />
           <svg ref={userLinesRef} className="userlines" />
+          <svg ref={trendPreviewRef} className="userlines" />
           <svg ref={hLabelsRef} className="userlines" />
           <div ref={arrowsContainerRef} className="patternarrows" />
           <div ref={popupLayerRef} className="chartballoon-layer" />
