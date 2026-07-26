@@ -13,6 +13,11 @@ import { findPivots } from "@/lib/analysis/patterns";
 export interface InflectionSignal {
   rule: "volume-anomaly" | "rsi-divergence" | "obv-divergence" | "bb-squeeze";
   detail: string;
+  /** rsi-divergence/obv-divergence only: the two points (prior same-type
+   * pivot -> this pivot) on the INDICATOR's own scale, not price — lets the
+   * UI draw the actual divergence line on the RSI/OBV sub-panel instead of
+   * only describing it in text. */
+  line?: { p1: { date: string; value: number }; p2: { date: string; value: number } };
 }
 
 export interface InflectionPoint {
@@ -110,6 +115,10 @@ export function inflectionPoints(candles: Candle[]): InflectionResult {
         signals.push({
           rule: "rsi-divergence",
           detail: `가격은 이전 ${piv.type === "peak" ? "고점" : "저점"}보다 ${priceUp ? "올랐는데" : "내렸는데"} RSI는 반대로 ${rsiUp ? "올라감" : "내려감"}`,
+          line: {
+            p1: { date: candles[j].date, value: rsiVals[j]! },
+            p2: { date: candles[i].date, value: rsiVals[i]! },
+          },
         });
       }
     }
@@ -121,6 +130,10 @@ export function inflectionPoints(candles: Candle[]): InflectionResult {
       signals.push({
         rule: "obv-divergence",
         detail: `가격은 이전 ${piv.type === "peak" ? "고점" : "저점"}보다 ${priceUp ? "올랐는데" : "내렸는데"} 누적거래량(OBV)은 반대로 ${obvUp ? "올라감" : "내려감"}`,
+        line: {
+          p1: { date: candles[j].date, value: obv[j] },
+          p2: { date: candles[i].date, value: obv[i] },
+        },
       });
     }
 

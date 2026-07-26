@@ -1095,6 +1095,18 @@ button {
   z-index: 3;
 }
 
+/* RSI 서브패널 위 다이버전스 라인(prior pivot -> this pivot, RSI 자체 스케일) —
+   same replaced-element/clip-path sizing approach as .patternlines (see
+   ChartStack.tsx drawRsiDivergenceLines) */
+.rsilines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 3;
+}
+
 /* container for the persistent per-pattern location arrows — overlays the
    whole main pane; individual arrows (.patternpulse) position themselves
    absolutely within it via repositionArrows() in ChartStack.tsx */

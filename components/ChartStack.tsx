@@ -455,6 +455,8 @@ export default function ChartStack({
   const volumeApiRef = useRef<IChartApi | null>(null);
   const rsiHeightRef = useRef(DEFAULT_SUB_HEIGHT);
   const rsiApiRef = useRef<IChartApi | null>(null);
+  const rsiSeriesRef = useRef<ReturnType<IChartApi["addLineSeries"]> | null>(null);
+  const rsiLinesRef = useRef<SVGSVGElement>(null);
   const macdHeightRef = useRef(DEFAULT_SUB_HEIGHT);
   const macdApiRef = useRef<IChartApi | null>(null);
 
@@ -803,6 +805,54 @@ export default function ChartStack({
       }
     }
   }, []);
+
+  // Draws each rsi-divergence signal's line (prior pivot -> this pivot, on
+  // RSI's own 0-100 scale) as a plain straight <line> over the RSI sub-panel
+  // — same coordinate-conversion + resync-on-pan/zoom pattern as
+  // drawPatternLinePositions above, just simpler (2 points, no curve/reveal).
+  // Only drawn when both the RSI panel and the 변곡점 예측 layer are on,
+  // since the line is meaningless without the inflection point it explains.
+  const drawRsiDivergenceLines = useCallback(() => {
+    const svg = rsiLinesRef.current;
+    if (!svg) return;
+    const rsiChart = rsiApiRef.current;
+    const rsiSeries = rsiSeriesRef.current;
+    const points = analysis?.advanced.inflectionPoints?.points;
+    if (!rsiChart || !rsiSeries || !layers.rsi || !layers.inflection || !points) {
+      svg.innerHTML = "";
+      return;
+    }
+    const axisWidth = Math.max(rsiChart.priceScale("right").width(), AXIS_WIDTH_FALLBACK);
+    svg.style.clipPath = `inset(0 ${axisWidth}px 0 0)`;
+    const SVG_NS = "http://www.w3.org/2000/svg";
+    const segs: { x1: number; y1: number; x2: number; y2: number; up: boolean }[] = [];
+    for (const p of points) {
+      for (const s of p.signals) {
+        if (s.rule !== "rsi-divergence" || !s.line) continue;
+        const x1 = rsiChart.timeScale().timeToCoordinate(s.line.p1.date as Time);
+        const y1 = rsiSeries.priceToCoordinate(s.line.p1.value);
+        const x2 = rsiChart.timeScale().timeToCoordinate(s.line.p2.date as Time);
+        const y2 = rsiSeries.priceToCoordinate(s.line.p2.value);
+        if (x1 == null || y1 == null || x2 == null || y2 == null) continue;
+        segs.push({ x1, y1, x2, y2, up: p.direction === "up" });
+      }
+    }
+    while (svg.children.length < segs.length) {
+      const line = document.createElementNS(SVG_NS, "line");
+      line.setAttribute("stroke-width", "2");
+      line.setAttribute("stroke-dasharray", "4 3");
+      svg.appendChild(line);
+    }
+    while (svg.children.length > segs.length) svg.lastChild && svg.removeChild(svg.lastChild);
+    segs.forEach((seg, idx) => {
+      const el = svg.children[idx] as SVGLineElement;
+      el.setAttribute("x1", String(seg.x1));
+      el.setAttribute("y1", String(seg.y1));
+      el.setAttribute("x2", String(seg.x2));
+      el.setAttribute("y2", String(seg.y2));
+      el.setAttribute("stroke", cssVar(seg.up ? "--up" : "--down"));
+    });
+  }, [analysis, layers.rsi, layers.inflection]);
 
   // Redraws user-drawn trend lines (two-point straight lines, not tied to any
   // pattern) to match the current time/price scale — same trigger points as
@@ -1754,6 +1804,7 @@ export default function ChartStack({
         lineWidth: 2,
         priceLineVisible: false,
       });
+      rsiSeriesRef.current = rsiSeries;
       rsiSeries.setData(toLineWithGaps(dates, analysis.indicators.rsi.values));
       for (const level of [70, 30]) {
         rsiSeries.createPriceLine({
@@ -1816,6 +1867,7 @@ export default function ChartStack({
         }
       }
     }
+    drawRsiDivergenceLines();
 
     // ---- sync time scales across all panes ----
     let syncing = false;
@@ -1957,6 +2009,7 @@ export default function ChartStack({
       checkLoadMore();
       repositionArrows();
       drawPatternLinePositions();
+      drawRsiDivergenceLines();
       drawUserLines();
       drawVolumeProfile();
     };
@@ -2255,6 +2308,7 @@ export default function ChartStack({
       drawCloud();
       repositionArrows();
       drawPatternLinePositions();
+      drawRsiDivergenceLines();
       drawUserLines();
       drawVolumeProfile();
     });
@@ -2278,6 +2332,7 @@ export default function ChartStack({
       mainApiRef.current = null;
       volumeApiRef.current = null;
       rsiApiRef.current = null;
+      rsiSeriesRef.current = null;
       macdApiRef.current = null;
       candleSeriesRef.current = null;
       for (const u of unsubs) u();
@@ -2352,10 +2407,11 @@ export default function ChartStack({
       requestAnimationFrame(() => {
         repositionArrows();
         drawPatternLinePositions();
+        drawRsiDivergenceLines();
       }),
     );
     return () => cancelAnimationFrame(raf);
-  }, [focusPattern, candles, repositionArrows, drawPatternLinePositions]);
+  }, [focusPattern, candles, repositionArrows, drawPatternLinePositions, drawRsiDivergenceLines]);
 
   // Closes the shared detail popup on any click outside it — annotation
   // clicks themselves stopPropagation (see openDetailPopup's callers) so
@@ -2602,6 +2658,7 @@ export default function ChartStack({
           </div>
           <div className="panel__chart">
             <div ref={rsiRef} />
+            <svg ref={rsiLinesRef} className="rsilines" />
           </div>
           <div className="resizehandle" onMouseDown={onRsiResizeDown} title="드래그해서 RSI 높이 조절">
             <span />
