@@ -513,13 +513,32 @@ export default function ChartStack({
         .join(" + ");
       const scoreExplain =
         `신뢰점수는 확률이 아니라, 규칙마다 미리 정해둔 점수(거래량이상 0.25 · RSI다이버전스 0.30 · ` +
-        `OBV다이버전스 0.25 · BB스퀴즈 0.20, 다 더하면 최대 1.00)를 그중 해당하는 규칙만 더한 값입니다. ` +
+        `OBV다이버전스 0.25 · BB스퀴즈 0.20, 다 더하면 만점 1.00)를 그중 해당하는 규칙만 더한 값입니다. ` +
         `이 지점은 ${scoreBreakdown} = ${p.confidence.toFixed(2)}.`;
+
+      // Where this point's score sits among every point this stock produced —
+      // min/max/percentile, computed from the live analysis result rather
+      // than the static "0.5~0.55대가 흔함" note in inflection.ts, since the
+      // real distribution differs stock to stock.
+      const allConfidences = (analysis?.advanced.inflectionPoints?.points ?? []).map((pt) => pt.confidence);
+      let distributionLine = "";
+      if (allConfidences.length) {
+        const minC = Math.min(...allConfidences);
+        const maxC = Math.max(...allConfidences);
+        const countAtOrAbove = allConfidences.filter((c) => c >= p.confidence).length;
+        const topPct = Math.max(1, Math.round((countAtOrAbove / allConfidences.length) * 100));
+        distributionLine =
+          `<div class="chartballoon__foot">신뢰점수 범위: 0.50(표시 최소 기준) ~ 1.00(만점) · ` +
+          `이 종목에서 실제 탐지된 ${allConfidences.length}개 지점은 ${minC.toFixed(2)}~${maxC.toFixed(2)} 사이 · ` +
+          `이 지점은 그중 상위 ${topPct}%(신뢰점수가 이 값 이상인 지점 ${countAtOrAbove}개)</div>`;
+      }
+
       let html =
         `<div class="chartballoon__head">${p.date} · ${p.direction === "up" ? "상승 전환" : "하락 전환"} · <span title="${scoreExplain}">신뢰점수 ${p.confidence.toFixed(2)}</span></div>` +
         `<div class="chartballoon__sub">${formatPrice(p.price, currency)}</div>` +
         `<ul class="chartballoon__rules">${rulesHtml}</ul>` +
-        `<div class="chartballoon__foot">${p.signals.length}개 규칙 부합</div>`;
+        `<div class="chartballoon__foot">${p.signals.length}개 규칙 부합</div>` +
+        distributionLine;
 
       // Structural confirmation + Elliott sizing — only shown on the ANCHOR
       // point (the most recent inflection hit the chain picked up as
