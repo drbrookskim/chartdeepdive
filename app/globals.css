@@ -1168,6 +1168,26 @@ button {
   z-index: 6;
   word-break: keep-all;
   overflow-wrap: break-word;
+  scrollbar-width: thin; /* firefox */
+  scrollbar-color: transparent transparent;
+}
+/* scrollbar stays invisible until the user is actually scrolling/hovering —
+   avoids a permanent scrollbar taking up space on a popup that's short
+   most of the time. */
+.chartballoon:hover,
+.chartballoon:active {
+  scrollbar-color: var(--border) transparent;
+}
+.chartballoon::-webkit-scrollbar {
+  width: 6px;
+}
+.chartballoon::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 3px;
+}
+.chartballoon:hover::-webkit-scrollbar-thumb,
+.chartballoon:active::-webkit-scrollbar-thumb {
+  background: var(--border);
 }
 .chartballoon::after {
   content: "";
