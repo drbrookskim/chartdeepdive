@@ -122,6 +122,7 @@ export interface LayerState {
   volumeProfile: boolean;
   rsi: boolean;
   macd: boolean;
+  obv: boolean;
   ichimoku: boolean;
   elliott: boolean;
   inflection: boolean;
@@ -336,6 +337,7 @@ export default function ChartStack({
   const volumeRef = useRef<HTMLDivElement>(null);
   const rsiRef = useRef<HTMLDivElement>(null);
   const macdRef = useRef<HTMLDivElement>(null);
+  const obvRef = useRef<HTMLDivElement>(null);
   const cloudRef = useRef<SVGSVGElement>(null);
   const patternLinesRef = useRef<SVGSVGElement>(null);
   const userLinesRef = useRef<SVGSVGElement>(null);
@@ -459,6 +461,10 @@ export default function ChartStack({
   const rsiLinesRef = useRef<SVGSVGElement>(null);
   const macdHeightRef = useRef(DEFAULT_SUB_HEIGHT);
   const macdApiRef = useRef<IChartApi | null>(null);
+  const obvHeightRef = useRef(DEFAULT_SUB_HEIGHT);
+  const obvApiRef = useRef<IChartApi | null>(null);
+  const obvSeriesRef = useRef<ReturnType<IChartApi["addLineSeries"]> | null>(null);
+  const obvLinesRef = useRef<SVGSVGElement>(null);
 
   // Zoom-adaptive resolution: when the user zooms in past the point where
   // daily bars go sparse, swap the main pane's data for a finer intraday
@@ -807,32 +813,34 @@ export default function ChartStack({
   }, []);
 
   // Draws each rsi-divergence signal's line (prior pivot -> this pivot, on
-  // RSI's own 0-100 scale) as a plain straight <line> over the RSI sub-panel
-  // — same coordinate-conversion + resync-on-pan/zoom pattern as
+  // indicator's own scale) as a plain straight <line> over the RSI/OBV
+  // sub-panel — same coordinate-conversion + resync-on-pan/zoom pattern as
   // drawPatternLinePositions above, just simpler (2 points, no curve/reveal).
-  // Only drawn when both the RSI panel and the 변곡점 예측 layer are on,
-  // since the line is meaningless without the inflection point it explains.
-  const drawRsiDivergenceLines = useCallback(() => {
-    const svg = rsiLinesRef.current;
+  // Shared by both panels; each caller passes its own chart/series/svg refs
+  // and which rule's `line` field to read off the inflection points.
+  function drawDivergenceLines(
+    svg: SVGSVGElement | null,
+    chart: IChartApi | null,
+    series: ReturnType<IChartApi["addLineSeries"]> | null,
+    points: InflectionPoint[] | undefined,
+    rule: "rsi-divergence" | "obv-divergence",
+  ) {
     if (!svg) return;
-    const rsiChart = rsiApiRef.current;
-    const rsiSeries = rsiSeriesRef.current;
-    const points = analysis?.advanced.inflectionPoints?.points;
-    if (!rsiChart || !rsiSeries || !layers.rsi || !layers.inflection || !points) {
+    if (!chart || !series || !points) {
       svg.innerHTML = "";
       return;
     }
-    const axisWidth = Math.max(rsiChart.priceScale("right").width(), AXIS_WIDTH_FALLBACK);
+    const axisWidth = Math.max(chart.priceScale("right").width(), AXIS_WIDTH_FALLBACK);
     svg.style.clipPath = `inset(0 ${axisWidth}px 0 0)`;
     const SVG_NS = "http://www.w3.org/2000/svg";
     const segs: { x1: number; y1: number; x2: number; y2: number; up: boolean }[] = [];
     for (const p of points) {
       for (const s of p.signals) {
-        if (s.rule !== "rsi-divergence" || !s.line) continue;
-        const x1 = rsiChart.timeScale().timeToCoordinate(s.line.p1.date as Time);
-        const y1 = rsiSeries.priceToCoordinate(s.line.p1.value);
-        const x2 = rsiChart.timeScale().timeToCoordinate(s.line.p2.date as Time);
-        const y2 = rsiSeries.priceToCoordinate(s.line.p2.value);
+        if (s.rule !== rule || !s.line) continue;
+        const x1 = chart.timeScale().timeToCoordinate(s.line.p1.date as Time);
+        const y1 = series.priceToCoordinate(s.line.p1.value);
+        const x2 = chart.timeScale().timeToCoordinate(s.line.p2.date as Time);
+        const y2 = series.priceToCoordinate(s.line.p2.value);
         if (x1 == null || y1 == null || x2 == null || y2 == null) continue;
         segs.push({ x1, y1, x2, y2, up: p.direction === "up" });
       }
@@ -852,7 +860,19 @@ export default function ChartStack({
       el.setAttribute("y2", String(seg.y2));
       el.setAttribute("stroke", cssVar(seg.up ? "--up" : "--down"));
     });
+  }
+
+  // Only drawn when both the panel itself and the 변곡점 예측 layer are on,
+  // since the line is meaningless without the inflection point it explains.
+  const drawRsiDivergenceLines = useCallback(() => {
+    const points = layers.rsi && layers.inflection ? analysis?.advanced.inflectionPoints?.points : undefined;
+    drawDivergenceLines(rsiLinesRef.current, rsiApiRef.current, rsiSeriesRef.current, points, "rsi-divergence");
   }, [analysis, layers.rsi, layers.inflection]);
+
+  const drawObvDivergenceLines = useCallback(() => {
+    const points = layers.obv && layers.inflection ? analysis?.advanced.inflectionPoints?.points : undefined;
+    drawDivergenceLines(obvLinesRef.current, obvApiRef.current, obvSeriesRef.current, points, "obv-divergence");
+  }, [analysis, layers.obv, layers.inflection]);
 
   // Redraws user-drawn trend lines (two-point straight lines, not tied to any
   // pattern) to match the current time/price scale — same trigger points as
@@ -1853,7 +1873,26 @@ export default function ChartStack({
       // NOT fitContent() here either — see the RSI block above.
     }
 
-    // RSI/MACD were just created without setting their own range; match
+    // ---- OBV sub-panel ----
+    if (layers.obv && obvRef.current && analysis?.indicators.obv) {
+      const obvChart = createChart(obvRef.current, {
+        ...common,
+        height: obvHeightRef.current,
+        width: obvRef.current.clientWidth,
+      });
+      charts.push(obvChart);
+      obvApiRef.current = obvChart;
+      const obvSeries = obvChart.addLineSeries({
+        color: cssVar("--gapcat"),
+        lineWidth: 2,
+        priceLineVisible: false,
+      });
+      obvSeriesRef.current = obvSeries;
+      obvSeries.setData(toLineWithGaps(dates, analysis.indicators.obv.values));
+      // NOT fitContent() here either — see the RSI block above.
+    }
+
+    // RSI/MACD/OBV were just created without setting their own range; match
     // main's actual visible range exactly instead of letting them each
     // fitContent() independently (which visibly diverged from main's
     // range). Logical (bar-index), not date-based — setVisibleRange with a
@@ -1868,6 +1907,7 @@ export default function ChartStack({
       }
     }
     drawRsiDivergenceLines();
+    drawObvDivergenceLines();
 
     // ---- sync time scales across all panes ----
     let syncing = false;
@@ -2010,6 +2050,7 @@ export default function ChartStack({
       repositionArrows();
       drawPatternLinePositions();
       drawRsiDivergenceLines();
+      drawObvDivergenceLines();
       drawUserLines();
       drawVolumeProfile();
     };
@@ -2309,6 +2350,7 @@ export default function ChartStack({
       repositionArrows();
       drawPatternLinePositions();
       drawRsiDivergenceLines();
+      drawObvDivergenceLines();
       drawUserLines();
       drawVolumeProfile();
     });
@@ -2334,6 +2376,8 @@ export default function ChartStack({
       rsiApiRef.current = null;
       rsiSeriesRef.current = null;
       macdApiRef.current = null;
+      obvApiRef.current = null;
+      obvSeriesRef.current = null;
       candleSeriesRef.current = null;
       for (const u of unsubs) u();
       for (const c of charts) c.remove();
@@ -2408,10 +2452,18 @@ export default function ChartStack({
         repositionArrows();
         drawPatternLinePositions();
         drawRsiDivergenceLines();
+        drawObvDivergenceLines();
       }),
     );
     return () => cancelAnimationFrame(raf);
-  }, [focusPattern, candles, repositionArrows, drawPatternLinePositions, drawRsiDivergenceLines]);
+  }, [
+    focusPattern,
+    candles,
+    repositionArrows,
+    drawPatternLinePositions,
+    drawRsiDivergenceLines,
+    drawObvDivergenceLines,
+  ]);
 
   // Closes the shared detail popup on any click outside it — annotation
   // clicks themselves stopPropagation (see openDetailPopup's callers) so
@@ -2464,6 +2516,7 @@ export default function ChartStack({
   const onVolumeResizeDown = makeResizeHandler(volumeHeightRef, volumeApiRef, MIN_SUB_HEIGHT, MAX_SUB_HEIGHT);
   const onRsiResizeDown = makeResizeHandler(rsiHeightRef, rsiApiRef, MIN_SUB_HEIGHT, MAX_SUB_HEIGHT);
   const onMacdResizeDown = makeResizeHandler(macdHeightRef, macdApiRef, MIN_SUB_HEIGHT, MAX_SUB_HEIGHT);
+  const onObvResizeDown = makeResizeHandler(obvHeightRef, obvApiRef, MIN_SUB_HEIGHT, MAX_SUB_HEIGHT);
 
   // Persists the current horizontal/trend lines for THIS symbol so a reload
   // restores them (see loadStoredLines in the [candles] effect above) —
@@ -2658,7 +2711,7 @@ export default function ChartStack({
           </div>
           <div className="panel__chart">
             <div ref={rsiRef} />
-            <svg ref={rsiLinesRef} className="rsilines" />
+            <svg ref={rsiLinesRef} className="divergencelines" />
           </div>
           <div className="resizehandle" onMouseDown={onRsiResizeDown} title="드래그해서 RSI 높이 조절">
             <span />
@@ -2679,6 +2732,24 @@ export default function ChartStack({
             <div ref={macdRef} />
           </div>
           <div className="resizehandle" onMouseDown={onMacdResizeDown} title="드래그해서 MACD 높이 조절">
+            <span />
+          </div>
+        </div>
+      )}
+
+      {layers.obv && (
+        <div className="panel">
+          <div className="panel__label">
+            <span>OBV(누적거래량)</span>
+            <span className="v">
+              {lastNonNull(analysis?.indicators.obv?.values)?.toLocaleString() ?? "—"}
+            </span>
+          </div>
+          <div className="panel__chart">
+            <div ref={obvRef} />
+            <svg ref={obvLinesRef} className="divergencelines" />
+          </div>
+          <div className="resizehandle" onMouseDown={onObvResizeDown} title="드래그해서 OBV 높이 조절">
             <span />
           </div>
         </div>

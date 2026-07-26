@@ -22,7 +22,7 @@ import { detectPatterns, type Pattern, CONFIDENCE_THRESHOLD } from "@/lib/analys
 import { detectHarmonic } from "@/lib/analysis/harmonic";
 import { ichimoku, type IchimokuResult } from "@/lib/analysis/ichimoku";
 import { elliottWave, type ElliottResult } from "@/lib/analysis/elliott";
-import { inflectionPoints, type InflectionResult } from "@/lib/analysis/inflection";
+import { inflectionPoints, onBalanceVolume, type InflectionResult } from "@/lib/analysis/inflection";
 import { smc, smcEvents, type SmcResult, type SmcEvent } from "@/lib/analysis/smc";
 import { ippContinuationChain, type IppChainResult } from "@/lib/analysis/ipp-chain";
 
@@ -48,6 +48,7 @@ export interface AnalysisResult {
     rsi: RsiResult | null;
     macd: MacdResult | null;
     bollinger: BollingerResult | null;
+    obv: { values: number[] } | null;
   };
   patterns: {
     structural: Pattern[];
@@ -126,6 +127,10 @@ export function analyze(input: AnalyzeInput): AnalysisResult {
   if (n >= MIN_BARS.macd) macdResult = macd(price, 12, 26, 9);
   else unavailable["indicators.macd"] = `need ${MIN_BARS.macd} candles, have ${n}`;
 
+  // --- OBV --- (cumulative, meaningful from the first bar — no minimum)
+  const obvResult = n > 0 ? { values: onBalanceVolume(candles) } : null;
+  if (!obvResult) unavailable["indicators.obv"] = `need >=1 candle, have ${n}`;
+
   // --- Bollinger ---
   let bbResult: BollingerResult | null = null;
   if (n >= MIN_BARS.bollinger) bbResult = bollinger(price, 20, 2);
@@ -192,6 +197,7 @@ export function analyze(input: AnalyzeInput): AnalysisResult {
       rsi: rsiResult,
       macd: macdResult,
       bollinger: bbResult,
+      obv: obvResult,
     },
     patterns: { structural, harmonic },
     advanced: {

@@ -1095,10 +1095,10 @@ button {
   z-index: 3;
 }
 
-/* RSI 서브패널 위 다이버전스 라인(prior pivot -> this pivot, RSI 자체 스케일) —
-   same replaced-element/clip-path sizing approach as .patternlines (see
-   ChartStack.tsx drawRsiDivergenceLines) */
-.rsilines {
+/* RSI/OBV 서브패널 위 다이버전스 라인(prior pivot -> this pivot, 해당 지표 자체
+   스케일) — same replaced-element/clip-path sizing approach as .patternlines
+   (see ChartStack.tsx drawDivergenceLines) */
+.divergencelines {
   position: absolute;
   inset: 0;
   width: 100%;

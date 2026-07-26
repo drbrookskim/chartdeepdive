@@ -103,7 +103,7 @@ export default function LayerControls({
   const [expandBasic, setExpandBasic] = useState(true);
   const [expandAdvanced, setExpandAdvanced] = useState(true);
 
-  const BASIC_KEYS: (keyof LayerState)[] = ["ma", "ema", "bollinger", "volume", "volumeProfile", "rsi", "macd"];
+  const BASIC_KEYS: (keyof LayerState)[] = ["ma", "ema", "bollinger", "volume", "volumeProfile", "rsi", "macd", "obv"];
   const ADVANCED_KEYS: (keyof LayerState)[] = ["ichimoku", "elliott", "inflection"];
 
   // The section-level switch is a master on/off: off -> on turns on just the
@@ -197,6 +197,14 @@ export default function LayerControls({
             disabled={!ind?.macd}
             reason={un["indicators.macd"]}
             onClick={() => onLayer("macd")}
+          />
+          <CheckRow
+            label="OBV(누적거래량)"
+            sub="서브패널"
+            checked={layers.obv}
+            disabled={!ind?.obv}
+            reason={un["indicators.obv"]}
+            onClick={() => onLayer("obv")}
           />
         </div>
         )}

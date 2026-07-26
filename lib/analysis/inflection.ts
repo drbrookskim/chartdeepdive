@@ -51,7 +51,10 @@ const VOLUME_Z = 2;
 const SQUEEZE_WINDOW = 60;
 const SQUEEZE_PERCENTILE = 0.2;
 
-function onBalanceVolume(candles: Candle[]): number[] {
+/** Cumulative volume (+volume on an up close, -volume on a down close) —
+ * exported so the OBV sub-panel (ChartStack.tsx) can plot the same series
+ * this module already computes for obv-divergence, instead of recomputing. */
+export function onBalanceVolume(candles: Candle[]): number[] {
   const out: number[] = [0];
   for (let i = 1; i < candles.length; i++) {
     const dir = Math.sign(candles[i].close - candles[i - 1].close);
