@@ -42,6 +42,21 @@ const NEON = "#39ff14";
  * (x, anchorTop), vertically centered — flipping to render on the RIGHT
  * instead when there isn't enough room to the left (e.g. an anchor near
  * the chart's left edge). */
+/** Deep-dive on RSI-vs-OBV divergence, shown collapsed (<details>) in the
+ * inflection popup whenever either rule fires — RSI reads price momentum
+ * ("힘"), OBV reads money flow ("거래량"), and comparing the two filters out
+ * false signals. Own wording, not a reproduction of any single source. */
+const DIVERGENCE_DEEPDIVE_HTML =
+  `<details class="chartballoon__details"><summary>RSI vs OBV 다이버전스, 뭐가 다른가</summary>` +
+  `<div class="chartballoon__detailsbody">` +
+  `<p>RSI는 가격이 오르내리는 <b>속도와 힘(모멘텀)</b>을 보고, OBV는 그 뒤에 실제로 붙은 <b>돈(거래량)</b>을 봅니다. 둘 다 다이버전스가 뜨면 가격만으론 안 보이던 추세의 진짜 힘 빠짐/힘 실림을 잡아낼 수 있습니다.</p>` +
+  `<p><b>RSI다이버전스</b> — 단기 추세 피로도를 잘 잡아냄. 가격은 계속 가는데 오르내리는 힘 자체가 약해지고 있다는 신호.</p>` +
+  `<p><b>OBV다이버전스</b> — 거래량은 상대적으로 속이기 어려워 신뢰도가 더 높은 편. 가격은 오르는데 실제 사들이는 돈은 줄고 있다면(혹은 그 반대라면) 세력 매집·이탈 정황으로 해석.</p>` +
+  `<p><b>상승 다이버전스(매수 쪽 신호)</b> — 가격 저점은 낮아지는데 지표(RSI/OBV) 저점은 오히려 높아지는 형태. 파는 힘이 빠졌거나(RSI), 저가에 몰래 매집이 들어오고 있다는(OBV) 뜻으로 봅니다.</p>` +
+  `<p><b>하락 다이버전스(매도 쪽 신호)</b> — 가격 고점은 높아지는데 지표 고점은 오히려 낮아지는 형태. 오르는 힘이 고갈됐거나(RSI), 물량이 빠져나가고 있다는(OBV) 뜻으로 봅니다.</p>` +
+  `<p>다이버전스는 속임수(false signal)가 섞일 수 있어 단독으로는 확정 신호가 아닙니다. RSI와 OBV가 같은 방향으로 동시에 뜨면(가격 저점/고점이 낮아지거나 높아지는데 둘 다 반대로 움직이면) 신뢰도가 크게 올라가고, 일반적으로 OBV 쪽이 RSI보다 속임수가 적은 편이라 RSI 신호가 뜨면 OBV 방향도 같이 확인하는 게 좋습니다.</p>` +
+  `</div></details>`;
+
 function placeChartBalloon(popup: HTMLDivElement, x: number, anchorTop: number) {
   const GAP = 14;
   const FLIP_MARGIN = 8;
@@ -517,6 +532,7 @@ export default function ChartStack({
           return `<li><b${explain ? ` title="${explain}"` : ""}>${label}</b> — ${s.detail}</li>`;
         })
         .join("");
+      const hasDivergence = p.signals.some((s) => s.rule === "rsi-divergence" || s.rule === "obv-divergence");
       const scoreBreakdown = p.signals
         .map((s) => `${inflectionRuleLabel(s.rule)} ${RULE_WEIGHTS[s.rule].toFixed(2)}`)
         .join(" + ");
@@ -552,6 +568,7 @@ export default function ChartStack({
         `<div class="chartballoon__head">${p.date} · ${p.direction === "up" ? "상승 전환" : "하락 전환"} · <span title="${scoreExplain}">신뢰점수 ${p.confidence.toFixed(2)}</span></div>` +
         `<div class="chartballoon__sub">${formatPrice(p.price, currency)}</div>` +
         `<ul class="chartballoon__rules">${rulesHtml}</ul>` +
+        (hasDivergence ? DIVERGENCE_DEEPDIVE_HTML : "") +
         `<div class="chartballoon__foot">${p.signals.length}개 규칙 부합</div>` +
         distributionLine +
         interpretNote;

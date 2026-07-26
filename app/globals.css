@@ -1238,6 +1238,28 @@ button {
 .chartballoon__rules li.fail {
   color: var(--down);
 }
+.chartballoon__details {
+  margin: 0 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+.chartballoon__details summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 11px;
+  color: var(--accent);
+}
+.chartballoon__detailsbody {
+  margin-top: 6px;
+}
+.chartballoon__detailsbody p {
+  margin: 0 0 6px;
+  line-height: 1.5;
+}
+.chartballoon__detailsbody p:last-child {
+  margin-bottom: 0;
+}
 .chartballoon__foot {
   color: var(--text-faint);
   font-size: 11px;
