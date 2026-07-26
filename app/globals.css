@@ -1147,12 +1147,13 @@ button {
 
 /* detail balloon shared by every clickable chart annotation (inflection
    arrows, elliott wave badges, the ichimoku info badge — see
-   openDetailPopup in ChartStack.tsx), anchored just above whichever one was
-   clicked, bottom-anchored so it grows upward instead of covering it */
+   openDetailPopup in ChartStack.tsx), anchored to the LEFT of whichever one
+   was clicked (right-aligned so it grows leftward, vertically centered),
+   so it doesn't sit on top of/below the candles right where the signal is */
 .chartballoon {
   display: none;
   position: absolute;
-  transform: translate(-50%, -100%);
+  transform: translate(-100%, -50%);
   width: min(330px, calc(100vw - 24px)); /* 220px x1.5 — chain block added long-form Korean sentences */
   max-height: min(420px, calc(100vh - 24px));
   overflow-y: auto;
@@ -1171,28 +1172,28 @@ button {
 .chartballoon::after {
   content: "";
   position: absolute;
-  left: 50%;
-  bottom: -6px;
+  top: 50%;
+  right: -6px;
   width: 10px;
   height: 10px;
   background: var(--surface);
-  border-right: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-  transform: translateX(-50%) rotate(45deg);
-}
-/* flipped when there's no room above the anchor (see placeChartBalloon in
-   ChartStack.tsx) — balloon grows downward, caret moves to the top edge and
-   points up instead of down */
-.chartballoon--below {
-  transform: translate(-50%, 0);
-}
-.chartballoon--below::after {
-  bottom: auto;
-  top: -6px;
-  border-right: none;
-  border-bottom: none;
-  border-left: 1px solid var(--border);
   border-top: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  transform: translateY(-50%) rotate(45deg);
+}
+/* flipped when there's no room to the left of the anchor (see
+   placeChartBalloon in ChartStack.tsx) — balloon grows rightward instead,
+   caret moves to the left edge and points left instead of right */
+.chartballoon--right {
+  transform: translate(0, -50%);
+}
+.chartballoon--right::after {
+  right: auto;
+  left: -6px;
+  border-top: none;
+  border-right: none;
+  border-bottom: 1px solid var(--border);
+  border-left: 1px solid var(--border);
 }
 .chartballoon__head {
   font-weight: 700;

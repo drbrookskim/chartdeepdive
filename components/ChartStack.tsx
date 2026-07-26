@@ -38,17 +38,18 @@ import {
  * deliberately theme-independent so it always pops against candles. */
 const NEON = "#39ff14";
 
-/** Positions the shared detail balloon (.chartballoon) at (x, anchorTop),
- * flipping to render BELOW the anchor instead of above when there isn't
- * enough room above — otherwise a badge near the top of the pane clips the
- * balloon's top against the container's overflow:hidden. */
+/** Positions the shared detail balloon (.chartballoon) to the LEFT of
+ * (x, anchorTop), vertically centered — flipping to render on the RIGHT
+ * instead when there isn't enough room to the left (e.g. an anchor near
+ * the chart's left edge). */
 function placeChartBalloon(popup: HTMLDivElement, x: number, anchorTop: number) {
+  const GAP = 14;
   const FLIP_MARGIN = 8;
-  const height = popup.offsetHeight;
-  const fitsAbove = anchorTop - 14 - height >= FLIP_MARGIN;
-  popup.classList.toggle("chartballoon--below", !fitsAbove);
-  popup.style.top = `${fitsAbove ? anchorTop - 14 : anchorTop + 14}px`;
-  popup.style.left = `${x}px`;
+  const width = popup.offsetWidth;
+  const fitsLeft = x - GAP - width >= FLIP_MARGIN;
+  popup.classList.toggle("chartballoon--right", !fitsLeft);
+  popup.style.left = `${fitsLeft ? x - GAP : x + GAP}px`;
+  popup.style.top = `${anchorTop}px`;
 }
 
 type Candle = OhlcvResponse["candles"][number];
