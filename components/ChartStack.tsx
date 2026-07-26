@@ -530,7 +530,8 @@ export default function ChartStack({
         distributionLine =
           `<div class="chartballoon__foot">신뢰점수 범위: 0.50(표시 최소 기준) ~ 1.00(만점) · ` +
           `이 종목에서 실제 탐지된 ${allConfidences.length}개 지점은 ${minC.toFixed(2)}~${maxC.toFixed(2)} 사이 · ` +
-          `이 지점은 그중 상위 ${topPct}%(신뢰점수가 이 값 이상인 지점 ${countAtOrAbove}개)</div>`;
+          `이 지점은 그중 상위 ${topPct}%(신뢰점수가 이 값 이상인 지점 ${countAtOrAbove}개)` +
+          `<br>상위 %란 이 지점 점수 이상인 지점이 전체 중 차지하는 비율입니다. 값이 작을수록 이 종목 안에서 더 드문(상대적으로 강한) 신호라는 뜻이며, 같은 점수라도 종목마다 전체 분포가 달라 상위 %는 종목마다 다르게 나옵니다.</div>`;
       }
 
       let html =
