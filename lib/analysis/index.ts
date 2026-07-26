@@ -156,7 +156,7 @@ export function analyze(input: AnalyzeInput): AnalysisResult {
   else unavailable["advanced.elliottWave"] = `need ${MIN_BARS.elliott} candles, have ${n}`;
 
   let inflectionResult: InflectionResult | null = null;
-  if (n >= MIN_BARS.patterns) inflectionResult = inflectionPoints(candles);
+  if (n >= MIN_BARS.patterns) inflectionResult = inflectionPoints(candles, macdResult?.macd);
   else unavailable["advanced.inflectionPoints"] = `need ${MIN_BARS.patterns} candles, have ${n}`;
 
   let smcResult: SmcResult | null = null;

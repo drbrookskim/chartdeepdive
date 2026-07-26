@@ -34,8 +34,25 @@ export interface InflectionPoint {
   priorPivot: { date: string; price: number };
 }
 
+/** MACD-line divergence at a price pivot — NOT part of the scored
+ * rule-ensemble above (the `inflection-point-predictor` skill's rule leg is
+ * fixed at volume/RSI/OBV/BB-squeeze; adding a 5th weighted rule would
+ * silently reshuffle every confidence score already documented throughout
+ * the UI). Detected the same way as rsi-divergence (same pivot pairing,
+ * same divergent-direction test) but reported separately, purely so the
+ * MACD panel can draw the same kind of divergence line the RSI/OBV panels
+ * already do — visual only, doesn't affect `points`/confidence. */
+export interface MacdDivergencePoint {
+  date: string;
+  price: number;
+  direction: "up" | "down";
+  priorPivot: { date: string; price: number };
+  line: { p1: { date: string; value: number }; p2: { date: string; value: number } };
+}
+
 export interface InflectionResult {
   points: InflectionPoint[];
+  macdDivergence: MacdDivergencePoint[];
   note: string;
 }
 
@@ -87,7 +104,7 @@ function squeezeFlags(widths: number[], window: number, pct: number): boolean[] 
   });
 }
 
-export function inflectionPoints(candles: Candle[]): InflectionResult {
+export function inflectionPoints(candles: Candle[], macdLine?: (number | null)[]): InflectionResult {
   const price = closes(candles);
   const rsiVals = rsi(price, 14);
   const obv = onBalanceVolume(candles);
@@ -104,6 +121,7 @@ export function inflectionPoints(candles: Candle[]): InflectionResult {
   const squeeze = squeezeFlags(widths, SQUEEZE_WINDOW, SQUEEZE_PERCENTILE);
   const pivots = findPivots(candles, 5);
   const points: InflectionPoint[] = [];
+  const macdDivergence: MacdDivergencePoint[] = [];
 
   for (let k = 0; k < pivots.length; k++) {
     const piv = pivots[k];
@@ -126,6 +144,23 @@ export function inflectionPoints(candles: Candle[]): InflectionResult {
           line: {
             p1: { date: candles[j].date, value: rsiVals[j]! },
             p2: { date: candles[i].date, value: rsiVals[i]! },
+          },
+        });
+      }
+    }
+
+    if (macdLine && macdLine[i] != null && macdLine[j] != null) {
+      const macdUp = macdLine[i]! > macdLine[j]!;
+      const macdDivergent = piv.type === "peak" ? priceUp && !macdUp : !priceUp && macdUp;
+      if (macdDivergent) {
+        macdDivergence.push({
+          date: piv.date,
+          price: piv.price,
+          direction: piv.type === "peak" ? "down" : "up",
+          priorPivot: { date: prevSame.date, price: prevSame.price },
+          line: {
+            p1: { date: candles[j].date, value: macdLine[j]! },
+            p2: { date: candles[i].date, value: macdLine[i]! },
           },
         });
       }
@@ -177,6 +212,7 @@ export function inflectionPoints(candles: Candle[]): InflectionResult {
 
   return {
     points,
+    macdDivergence,
     note:
       "규칙 기반만 적용됨(거래량이상·RSI다이버전스·OBV다이버전스·BB스퀴즈). " +
       "원 앙상블의 ML(50%)·뉴스(15%) 레그는 미구현 — 과거 전환점에서 규칙이 " +

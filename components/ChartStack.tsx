@@ -466,6 +466,8 @@ export default function ChartStack({
   const obvApiRef = useRef<IChartApi | null>(null);
   const obvSeriesRef = useRef<ReturnType<IChartApi["addLineSeries"]> | null>(null);
   const obvLinesRef = useRef<SVGSVGElement>(null);
+  const macdLineSeriesRef = useRef<ReturnType<IChartApi["addLineSeries"]> | null>(null);
+  const macdLinesRef = useRef<SVGSVGElement>(null);
 
   // Zoom-adaptive resolution: when the user zooms in past the point where
   // daily bars go sparse, swap the main pane's data for a finer intraday
@@ -813,39 +815,16 @@ export default function ChartStack({
     }
   }, []);
 
-  // Draws each rsi-divergence signal's line (prior pivot -> this pivot, on
-  // indicator's own scale) as a plain straight <line> over the RSI/OBV
-  // sub-panel — same coordinate-conversion + resync-on-pan/zoom pattern as
-  // drawPatternLinePositions above, just simpler (2 points, no curve/reveal).
-  // Shared by both panels; each caller passes its own chart/series/svg refs
-  // and which rule's `line` field to read off the inflection points.
-  function drawDivergenceLines(
-    svg: SVGSVGElement | null,
-    chart: IChartApi | null,
-    series: ReturnType<IChartApi["addLineSeries"]> | null,
-    points: InflectionPoint[] | undefined,
-    rule: "rsi-divergence" | "obv-divergence",
+  // Syncs an svg's <line> children 1:1 to `segs` — shared tail end of every
+  // divergence-line drawer below (RSI/OBV/MACD panels + main chart), each of
+  // which only differs in how it builds `segs`.
+  function syncDivergenceSvg(
+    svg: SVGSVGElement,
+    axisWidth: number,
+    segs: { x1: number; y1: number; x2: number; y2: number; up: boolean }[],
   ) {
-    if (!svg) return;
-    if (!chart || !series || !points) {
-      svg.innerHTML = "";
-      return;
-    }
-    const axisWidth = Math.max(chart.priceScale("right").width(), AXIS_WIDTH_FALLBACK);
     svg.style.clipPath = `inset(0 ${axisWidth}px 0 0)`;
     const SVG_NS = "http://www.w3.org/2000/svg";
-    const segs: { x1: number; y1: number; x2: number; y2: number; up: boolean }[] = [];
-    for (const p of points) {
-      for (const s of p.signals) {
-        if (s.rule !== rule || !s.line) continue;
-        const x1 = chart.timeScale().timeToCoordinate(s.line.p1.date as Time);
-        const y1 = series.priceToCoordinate(s.line.p1.value);
-        const x2 = chart.timeScale().timeToCoordinate(s.line.p2.date as Time);
-        const y2 = series.priceToCoordinate(s.line.p2.value);
-        if (x1 == null || y1 == null || x2 == null || y2 == null) continue;
-        segs.push({ x1, y1, x2, y2, up: p.direction === "up" });
-      }
-    }
     while (svg.children.length < segs.length) {
       const line = document.createElementNS(SVG_NS, "line");
       line.setAttribute("stroke-width", "2");
@@ -863,6 +842,40 @@ export default function ChartStack({
     });
   }
 
+  // Draws each rsi-divergence/obv-divergence signal's line (prior pivot ->
+  // this pivot, on indicator's own scale) as a plain straight <line> over
+  // the RSI/OBV sub-panel — same coordinate-conversion + resync-on-pan/zoom
+  // pattern as drawPatternLinePositions above, just simpler (2 points, no
+  // curve/reveal). Shared by both panels; each caller passes its own
+  // chart/series/svg refs and which rule's `line` field to read off the
+  // inflection points.
+  function drawDivergenceLines(
+    svg: SVGSVGElement | null,
+    chart: IChartApi | null,
+    series: ReturnType<IChartApi["addLineSeries"]> | null,
+    points: InflectionPoint[] | undefined,
+    rule: "rsi-divergence" | "obv-divergence",
+  ) {
+    if (!svg) return;
+    if (!chart || !series || !points) {
+      svg.innerHTML = "";
+      return;
+    }
+    const segs: { x1: number; y1: number; x2: number; y2: number; up: boolean }[] = [];
+    for (const p of points) {
+      for (const s of p.signals) {
+        if (s.rule !== rule || !s.line) continue;
+        const x1 = chart.timeScale().timeToCoordinate(s.line.p1.date as Time);
+        const y1 = series.priceToCoordinate(s.line.p1.value);
+        const x2 = chart.timeScale().timeToCoordinate(s.line.p2.date as Time);
+        const y2 = series.priceToCoordinate(s.line.p2.value);
+        if (x1 == null || y1 == null || x2 == null || y2 == null) continue;
+        segs.push({ x1, y1, x2, y2, up: p.direction === "up" });
+      }
+    }
+    syncDivergenceSvg(svg, Math.max(chart.priceScale("right").width(), AXIS_WIDTH_FALLBACK), segs);
+  }
+
   // Only drawn when both the panel itself and the 변곡점 예측 layer are on,
   // since the line is meaningless without the inflection point it explains.
   const drawRsiDivergenceLines = useCallback(() => {
@@ -875,50 +888,67 @@ export default function ChartStack({
     drawDivergenceLines(obvLinesRef.current, obvApiRef.current, obvSeriesRef.current, points, "obv-divergence");
   }, [analysis, layers.obv, layers.inflection]);
 
+  // MACD-line divergence is NOT part of the scored inflection-point ensemble
+  // (see MacdDivergencePoint in inflection.ts) — its own flat list, not
+  // InflectionPoint.signals, so it gets its own drawer instead of reusing
+  // drawDivergenceLines above.
+  const drawMacdDivergenceLines = useCallback(() => {
+    const svg = macdLinesRef.current;
+    if (!svg) return;
+    const chart = macdApiRef.current;
+    const series = macdLineSeriesRef.current;
+    const divs = layers.macd && layers.inflection ? analysis?.advanced.inflectionPoints?.macdDivergence : undefined;
+    if (!chart || !series || !divs) {
+      svg.innerHTML = "";
+      return;
+    }
+    const segs: { x1: number; y1: number; x2: number; y2: number; up: boolean }[] = [];
+    for (const d of divs) {
+      const x1 = chart.timeScale().timeToCoordinate(d.line.p1.date as Time);
+      const y1 = series.priceToCoordinate(d.line.p1.value);
+      const x2 = chart.timeScale().timeToCoordinate(d.line.p2.date as Time);
+      const y2 = series.priceToCoordinate(d.line.p2.value);
+      if (x1 == null || y1 == null || x2 == null || y2 == null) continue;
+      segs.push({ x1, y1, x2, y2, up: d.direction === "up" });
+    }
+    syncDivergenceSvg(svg, Math.max(chart.priceScale("right").width(), AXIS_WIDTH_FALLBACK), segs);
+  }, [analysis, layers.macd, layers.inflection]);
+
   // Price-side of the divergence (prior pivot -> this pivot, on the main
   // chart's own price scale) — one line per inflection point that has an
   // rsi-divergence or obv-divergence signal (not one per signal, since both
-  // signals on the same point share the same pivot pair). Shown whenever
-  // 변곡점 예측 is on, independent of whether the RSI/OBV sub-panels
-  // themselves are open, since it explains the arrow already on this chart.
+  // signals on the same point share the same pivot pair), plus one per
+  // macd-divergence point (separate list, see MacdDivergencePoint). Shown
+  // whenever 변곡점 예측 is on, independent of whether the RSI/OBV/MACD
+  // sub-panels themselves are open, since it explains the arrow already on
+  // this chart.
   const drawMainDivergenceLines = useCallback(() => {
     const svg = mainDivergenceLinesRef.current;
     if (!svg) return;
     const main = mainApiRef.current;
     const series = candleSeriesRef.current;
-    const points = layers.inflection ? analysis?.advanced.inflectionPoints?.points : undefined;
-    if (!main || !series || !points) {
+    const infl = layers.inflection ? analysis?.advanced.inflectionPoints : undefined;
+    if (!main || !series || !infl) {
       svg.innerHTML = "";
       return;
     }
-    const axisWidth = Math.max(main.priceScale("right").width(), AXIS_WIDTH_FALLBACK);
-    svg.style.clipPath = `inset(0 ${axisWidth}px 0 0)`;
-    const SVG_NS = "http://www.w3.org/2000/svg";
     const segs: { x1: number; y1: number; x2: number; y2: number; up: boolean }[] = [];
-    for (const p of points) {
+    const addSeg = (priorPivot: { date: string; price: number }, date: string, price: number, up: boolean) => {
+      const x1 = main.timeScale().timeToCoordinate(priorPivot.date as Time);
+      const y1 = series.priceToCoordinate(priorPivot.price);
+      const x2 = main.timeScale().timeToCoordinate(date as Time);
+      const y2 = series.priceToCoordinate(price);
+      if (x1 == null || y1 == null || x2 == null || y2 == null) return;
+      segs.push({ x1, y1, x2, y2, up });
+    };
+    for (const p of infl.points) {
       if (!p.signals.some((s) => s.rule === "rsi-divergence" || s.rule === "obv-divergence")) continue;
-      const x1 = main.timeScale().timeToCoordinate(p.priorPivot.date as Time);
-      const y1 = series.priceToCoordinate(p.priorPivot.price);
-      const x2 = main.timeScale().timeToCoordinate(p.date as Time);
-      const y2 = series.priceToCoordinate(p.price);
-      if (x1 == null || y1 == null || x2 == null || y2 == null) continue;
-      segs.push({ x1, y1, x2, y2, up: p.direction === "up" });
+      addSeg(p.priorPivot, p.date, p.price, p.direction === "up");
     }
-    while (svg.children.length < segs.length) {
-      const line = document.createElementNS(SVG_NS, "line");
-      line.setAttribute("stroke-width", "2");
-      line.setAttribute("stroke-dasharray", "4 3");
-      svg.appendChild(line);
+    for (const d of infl.macdDivergence) {
+      addSeg(d.priorPivot, d.date, d.price, d.direction === "up");
     }
-    while (svg.children.length > segs.length) svg.lastChild && svg.removeChild(svg.lastChild);
-    segs.forEach((seg, idx) => {
-      const el = svg.children[idx] as SVGLineElement;
-      el.setAttribute("x1", String(seg.x1));
-      el.setAttribute("y1", String(seg.y1));
-      el.setAttribute("x2", String(seg.x2));
-      el.setAttribute("y2", String(seg.y2));
-      el.setAttribute("stroke", cssVar(seg.up ? "--up" : "--down"));
-    });
+    syncDivergenceSvg(svg, Math.max(main.priceScale("right").width(), AXIS_WIDTH_FALLBACK), segs);
   }, [analysis, layers.inflection]);
 
   // Redraws user-drawn trend lines (two-point straight lines, not tied to any
@@ -1915,6 +1945,7 @@ export default function ChartStack({
         priceLineVisible: false,
         priceFormat: { type: "price", precision: 0, minMove: 1 },
       });
+      macdLineSeriesRef.current = macdLine;
       macdLine.setData(toLineWithGaps(dates, m.macd));
       const sigLine = macdChart.addLineSeries({
         color: cssVar("--gapcat"),
@@ -1962,6 +1993,7 @@ export default function ChartStack({
     }
     drawRsiDivergenceLines();
     drawObvDivergenceLines();
+    drawMacdDivergenceLines();
     drawMainDivergenceLines();
 
     // ---- sync time scales across all panes ----
@@ -2106,6 +2138,7 @@ export default function ChartStack({
       drawPatternLinePositions();
       drawRsiDivergenceLines();
       drawObvDivergenceLines();
+      drawMacdDivergenceLines();
       drawMainDivergenceLines();
       drawUserLines();
       drawVolumeProfile();
@@ -2407,6 +2440,7 @@ export default function ChartStack({
       drawPatternLinePositions();
       drawRsiDivergenceLines();
       drawObvDivergenceLines();
+      drawMacdDivergenceLines();
       drawMainDivergenceLines();
       drawUserLines();
       drawVolumeProfile();
@@ -2435,6 +2469,7 @@ export default function ChartStack({
       macdApiRef.current = null;
       obvApiRef.current = null;
       obvSeriesRef.current = null;
+      macdLineSeriesRef.current = null;
       candleSeriesRef.current = null;
       for (const u of unsubs) u();
       for (const c of charts) c.remove();
@@ -2510,6 +2545,7 @@ export default function ChartStack({
         drawPatternLinePositions();
         drawRsiDivergenceLines();
         drawObvDivergenceLines();
+        drawMacdDivergenceLines();
         drawMainDivergenceLines();
       }),
     );
@@ -2521,6 +2557,7 @@ export default function ChartStack({
     drawPatternLinePositions,
     drawRsiDivergenceLines,
     drawObvDivergenceLines,
+    drawMacdDivergenceLines,
     drawMainDivergenceLines,
   ]);
 
@@ -2790,6 +2827,7 @@ export default function ChartStack({
           </div>
           <div className="panel__chart">
             <div ref={macdRef} />
+            <svg ref={macdLinesRef} className="divergencelines" />
           </div>
           <div className="resizehandle" onMouseDown={onMacdResizeDown} title="드래그해서 MACD 높이 조절">
             <span />
