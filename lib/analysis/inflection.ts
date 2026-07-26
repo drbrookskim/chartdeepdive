@@ -30,6 +30,16 @@ export interface InflectionResult {
 }
 
 const WEIGHTS = { volume: 0.25, rsiDiv: 0.3, obvDiv: 0.25, bbSqueeze: 0.2 };
+
+/** Same fixed weights, keyed by the `InflectionSignal.rule` id — for
+ * displaying the confidence breakdown (e.g. "0.55 = RSI다이버전스 0.30 +
+ * 거래량이상 0.25") without duplicating the numbers elsewhere. */
+export const RULE_WEIGHTS: Record<InflectionSignal["rule"], number> = {
+  "volume-anomaly": WEIGHTS.volume,
+  "rsi-divergence": WEIGHTS.rsiDiv,
+  "obv-divergence": WEIGHTS.obvDiv,
+  "bb-squeeze": WEIGHTS.bbSqueeze,
+};
 const THRESHOLD = 0.5;
 const VOLUME_WINDOW = 20;
 const VOLUME_Z = 2;

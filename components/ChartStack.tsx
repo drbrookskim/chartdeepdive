@@ -21,7 +21,7 @@ import {
 } from "lightweight-charts";
 import { fetchOhlcv, type OhlcvResponse, type AnalysisResult, type Market } from "@/lib/api";
 import type { Pattern } from "@/lib/analysis/patterns";
-import type { InflectionPoint } from "@/lib/analysis/inflection";
+import { RULE_WEIGHTS, type InflectionPoint } from "@/lib/analysis/inflection";
 import {
   categoryColorVar,
   formatAxisPrice,
@@ -508,8 +508,15 @@ export default function ChartStack({
           return `<li><b${explain ? ` title="${explain}"` : ""}>${label}</b> — ${s.detail}</li>`;
         })
         .join("");
+      const scoreBreakdown = p.signals
+        .map((s) => `${inflectionRuleLabel(s.rule)} ${RULE_WEIGHTS[s.rule].toFixed(2)}`)
+        .join(" + ");
+      const scoreExplain =
+        `신뢰점수는 확률이 아니라, 규칙마다 미리 정해둔 점수(거래량이상 0.25 · RSI다이버전스 0.30 · ` +
+        `OBV다이버전스 0.25 · BB스퀴즈 0.20, 다 더하면 최대 1.00)를 그중 해당하는 규칙만 더한 값입니다. ` +
+        `이 지점은 ${scoreBreakdown} = ${p.confidence.toFixed(2)}.`;
       let html =
-        `<div class="chartballoon__head">${p.date} · ${p.direction === "up" ? "상승 전환" : "하락 전환"} · 신뢰점수 ${p.confidence.toFixed(2)}(해당하는 신호들의 점수를 더한 값, 확률 아님)</div>` +
+        `<div class="chartballoon__head">${p.date} · ${p.direction === "up" ? "상승 전환" : "하락 전환"} · <span title="${scoreExplain}">신뢰점수 ${p.confidence.toFixed(2)}</span></div>` +
         `<div class="chartballoon__sub">${formatPrice(p.price, currency)}</div>` +
         `<ul class="chartballoon__rules">${rulesHtml}</ul>` +
         `<div class="chartballoon__foot">${p.signals.length}개 규칙 부합</div>`;
