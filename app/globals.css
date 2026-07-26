@@ -1154,7 +1154,7 @@ button {
   display: none;
   position: absolute;
   transform: translate(-100%, -50%);
-  width: min(330px, calc(100vw - 24px)); /* 220px x1.5 — chain block added long-form Korean sentences */
+  width: min(495px, calc(100vw - 24px)); /* 330px x1.5 */
   max-height: min(420px, calc(100vh - 24px));
   overflow-y: auto;
   background: var(--surface);
