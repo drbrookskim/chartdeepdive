@@ -341,6 +341,7 @@ export default function ChartStack({
   const cloudRef = useRef<SVGSVGElement>(null);
   const patternLinesRef = useRef<SVGSVGElement>(null);
   const userLinesRef = useRef<SVGSVGElement>(null);
+  const mainDivergenceLinesRef = useRef<SVGSVGElement>(null);
   const hLabelsRef = useRef<SVGSVGElement>(null);
   const volumeProfileRef = useRef<SVGSVGElement>(null);
   const ohlcRef = useRef<HTMLDivElement>(null);
@@ -873,6 +874,52 @@ export default function ChartStack({
     const points = layers.obv && layers.inflection ? analysis?.advanced.inflectionPoints?.points : undefined;
     drawDivergenceLines(obvLinesRef.current, obvApiRef.current, obvSeriesRef.current, points, "obv-divergence");
   }, [analysis, layers.obv, layers.inflection]);
+
+  // Price-side of the divergence (prior pivot -> this pivot, on the main
+  // chart's own price scale) — one line per inflection point that has an
+  // rsi-divergence or obv-divergence signal (not one per signal, since both
+  // signals on the same point share the same pivot pair). Shown whenever
+  // 변곡점 예측 is on, independent of whether the RSI/OBV sub-panels
+  // themselves are open, since it explains the arrow already on this chart.
+  const drawMainDivergenceLines = useCallback(() => {
+    const svg = mainDivergenceLinesRef.current;
+    if (!svg) return;
+    const main = mainApiRef.current;
+    const series = candleSeriesRef.current;
+    const points = layers.inflection ? analysis?.advanced.inflectionPoints?.points : undefined;
+    if (!main || !series || !points) {
+      svg.innerHTML = "";
+      return;
+    }
+    const axisWidth = Math.max(main.priceScale("right").width(), AXIS_WIDTH_FALLBACK);
+    svg.style.clipPath = `inset(0 ${axisWidth}px 0 0)`;
+    const SVG_NS = "http://www.w3.org/2000/svg";
+    const segs: { x1: number; y1: number; x2: number; y2: number; up: boolean }[] = [];
+    for (const p of points) {
+      if (!p.signals.some((s) => s.rule === "rsi-divergence" || s.rule === "obv-divergence")) continue;
+      const x1 = main.timeScale().timeToCoordinate(p.priorPivot.date as Time);
+      const y1 = series.priceToCoordinate(p.priorPivot.price);
+      const x2 = main.timeScale().timeToCoordinate(p.date as Time);
+      const y2 = series.priceToCoordinate(p.price);
+      if (x1 == null || y1 == null || x2 == null || y2 == null) continue;
+      segs.push({ x1, y1, x2, y2, up: p.direction === "up" });
+    }
+    while (svg.children.length < segs.length) {
+      const line = document.createElementNS(SVG_NS, "line");
+      line.setAttribute("stroke-width", "2");
+      line.setAttribute("stroke-dasharray", "4 3");
+      svg.appendChild(line);
+    }
+    while (svg.children.length > segs.length) svg.lastChild && svg.removeChild(svg.lastChild);
+    segs.forEach((seg, idx) => {
+      const el = svg.children[idx] as SVGLineElement;
+      el.setAttribute("x1", String(seg.x1));
+      el.setAttribute("y1", String(seg.y1));
+      el.setAttribute("x2", String(seg.x2));
+      el.setAttribute("y2", String(seg.y2));
+      el.setAttribute("stroke", cssVar(seg.up ? "--up" : "--down"));
+    });
+  }, [analysis, layers.inflection]);
 
   // Redraws user-drawn trend lines (two-point straight lines, not tied to any
   // pattern) to match the current time/price scale — same trigger points as
@@ -1908,6 +1955,7 @@ export default function ChartStack({
     }
     drawRsiDivergenceLines();
     drawObvDivergenceLines();
+    drawMainDivergenceLines();
 
     // ---- sync time scales across all panes ----
     let syncing = false;
@@ -2051,6 +2099,7 @@ export default function ChartStack({
       drawPatternLinePositions();
       drawRsiDivergenceLines();
       drawObvDivergenceLines();
+      drawMainDivergenceLines();
       drawUserLines();
       drawVolumeProfile();
     };
@@ -2351,6 +2400,7 @@ export default function ChartStack({
       drawPatternLinePositions();
       drawRsiDivergenceLines();
       drawObvDivergenceLines();
+      drawMainDivergenceLines();
       drawUserLines();
       drawVolumeProfile();
     });
@@ -2453,6 +2503,7 @@ export default function ChartStack({
         drawPatternLinePositions();
         drawRsiDivergenceLines();
         drawObvDivergenceLines();
+        drawMainDivergenceLines();
       }),
     );
     return () => cancelAnimationFrame(raf);
@@ -2463,6 +2514,7 @@ export default function ChartStack({
     drawPatternLinePositions,
     drawRsiDivergenceLines,
     drawObvDivergenceLines,
+    drawMainDivergenceLines,
   ]);
 
   // Closes the shared detail popup on any click outside it — annotation
@@ -2622,6 +2674,7 @@ export default function ChartStack({
           <svg ref={volumeProfileRef} className="volumeprofile" />
           <svg ref={cloudRef} className="cloudlayer" />
           <svg ref={patternLinesRef} className="patternlines" />
+          <svg ref={mainDivergenceLinesRef} className="divergencelines" />
           <svg ref={userLinesRef} className="userlines" />
           <svg ref={hLabelsRef} className="userlines" />
           <div ref={arrowsContainerRef} className="patternarrows" />

@@ -27,6 +27,11 @@ export interface InflectionPoint {
   direction: "up" | "down";
   confidence: number;
   signals: InflectionSignal[];
+  /** The prior same-type pivot (peak-vs-peak/trough-vs-trough) this point
+   * was compared against to detect divergence — lets the main candle chart
+   * draw the price-side of the divergence (prior pivot -> this pivot),
+   * matching the RSI/OBV-side lines already drawn on their sub-panels. */
+  priorPivot: { date: string; price: number };
 }
 
 export interface InflectionResult {
@@ -166,6 +171,7 @@ export function inflectionPoints(candles: Candle[]): InflectionResult {
       direction: piv.type === "peak" ? "down" : "up",
       confidence,
       signals,
+      priorPivot: { date: prevSame.date, price: prevSame.price },
     });
   }
 
