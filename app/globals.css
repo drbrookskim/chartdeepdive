@@ -1154,6 +1154,8 @@ button {
   color: var(--text);
   pointer-events: auto;
   z-index: 6;
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 .chartballoon::after {
   content: "";
