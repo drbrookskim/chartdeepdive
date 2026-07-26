@@ -28,6 +28,56 @@ export interface SmcResult {
   reason: string | null;
 }
 
+/** Same detector as `smc()`, but returns every BOS/ChoCH event in chronological
+ * order instead of only the latest one — needed to check structural
+ * confirmation for an arbitrary past inflection point, not just "as of
+ * today" (see ipp-chain.ts's `structureForPoint`). */
+export function smcEvents(candles: Candle[], window = 5): SmcEvent[] {
+  const sw = swings(candles, window);
+  if (sw.length < 2) return [];
+
+  const events: SmcEvent[] = [];
+  let trend: "up" | "down" | "range" = "range";
+  let refHigh: Swing | null = null;
+  let refLow: Swing | null = null;
+  let swIdx = 0;
+
+  for (let i = 0; i < candles.length; i++) {
+    while (swIdx < sw.length && sw[swIdx].index === i) {
+      const s = sw[swIdx];
+      if (s.type === "high") refHigh = s;
+      else refLow = s;
+      swIdx++;
+    }
+    if (!refHigh || !refLow) continue;
+
+    const close = candles[i].close;
+    if (close > refHigh.price) {
+      events.push({
+        type: trend === "down" ? "ChoCH" : "BOS",
+        direction: "up",
+        date: candles[i].date,
+        price: close,
+        brokenLevel: { date: refHigh.date, price: refHigh.price },
+      });
+      trend = "up";
+      refHigh = null;
+    } else if (close < refLow.price) {
+      events.push({
+        type: trend === "up" ? "ChoCH" : "BOS",
+        direction: "down",
+        date: candles[i].date,
+        price: close,
+        brokenLevel: { date: refLow.date, price: refLow.price },
+      });
+      trend = "down";
+      refLow = null;
+    }
+  }
+
+  return events;
+}
+
 interface Swing {
   index: number;
   date: string;

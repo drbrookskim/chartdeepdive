@@ -22,6 +22,7 @@ import {
 import { fetchOhlcv, type OhlcvResponse, type AnalysisResult, type Market } from "@/lib/api";
 import type { Pattern } from "@/lib/analysis/patterns";
 import { RULE_WEIGHTS, type InflectionPoint } from "@/lib/analysis/inflection";
+import { structureForPoint } from "@/lib/analysis/ipp-chain";
 import {
   categoryColorVar,
   formatAxisPrice,
@@ -534,18 +535,27 @@ export default function ChartStack({
           `<br>상위 %란 이 지점 점수 이상인 지점이 전체 중 차지하는 비율입니다. 값이 작을수록 이 종목 안에서 더 드문(상대적으로 강한) 신호라는 뜻이며, 같은 점수라도 종목마다 전체 분포가 달라 상위 %는 종목마다 다르게 나옵니다.</div>`;
       }
 
+      const interpretNote =
+        `<div class="chartballoon__foot">※ 이 신호는 과거 이 시점 기준으로 국소적인 전환을 사후 확인한 것이며, ` +
+        `실시간 예측이 아닙니다. 점수가 낮을수록(0.50에 가까울수록) 약한 신호이며, 이후 더 큰 추세에 묻혀 ` +
+        `반대로 흘러갈 수 있습니다.</div>`;
+
       let html =
         `<div class="chartballoon__head">${p.date} · ${p.direction === "up" ? "상승 전환" : "하락 전환"} · <span title="${scoreExplain}">신뢰점수 ${p.confidence.toFixed(2)}</span></div>` +
         `<div class="chartballoon__sub">${formatPrice(p.price, currency)}</div>` +
         `<ul class="chartballoon__rules">${rulesHtml}</ul>` +
         `<div class="chartballoon__foot">${p.signals.length}개 규칙 부합</div>` +
-        distributionLine;
+        distributionLine +
+        interpretNote;
 
-      // Structural confirmation + Elliott sizing — only shown on the ANCHOR
-      // point (the most recent inflection hit the chain picked up as
-      // "current"), since these are evaluated once against the latest
-      // signal, not per historical point. Three layers listed separately,
-      // never merged into one score (see lib/analysis/ipp-chain.ts).
+      // Structural confirmation + Elliott sizing — full chain (both layers)
+      // only on the ANCHOR point (the most recent inflection hit, where a
+      // forward-looking price target still makes sense). Every OTHER point
+      // still gets a lighter structure-only check — "was this reversal ever
+      // confirmed by an actual structure break afterward" — via
+      // structureForPoint, which scans the full smcEvents history instead of
+      // relying on the single latest event. Never merged into one score
+      // (see lib/analysis/ipp-chain.ts).
       const chain = analysis?.advanced.ippChain;
       if (chain?.anchor?.date === p.date) {
         html += `<div class="chartballoon__chain">`;
@@ -558,6 +568,12 @@ export default function ChartStack({
           }</div>`;
         }
         html += `<div class="chartballoon__foot">위 세 항목은 서로 다른 질문의 답이라 하나의 점수로 합치지 않고 따로 보여줍니다</div>`;
+        html += `</div>`;
+      } else if (analysis?.advanced.smcEvents) {
+        const structure = structureForPoint(p, analysis.advanced.smcEvents, currency);
+        html += `<div class="chartballoon__chain">`;
+        html += `<div class="chartballoon__chain-row"><b>이 반전이 이후 시장 구조로 확인됐는가</b><br>${structure.label} — ${structure.detail}</div>`;
+        html += `<div class="chartballoon__foot">과거 지점이라 목표가(엘리엇 파동) 단계는 평가하지 않습니다 — 목표가는 현재 살아있는 신호에서만 의미가 있습니다</div>`;
         html += `</div>`;
       }
 

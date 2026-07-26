@@ -13,7 +13,7 @@
 
 import type { Candle } from "@/lib/schema";
 import type { InflectionPoint, InflectionResult } from "@/lib/analysis/inflection";
-import type { SmcResult } from "@/lib/analysis/smc";
+import type { SmcEvent, SmcResult } from "@/lib/analysis/smc";
 import type { ElliottResult } from "@/lib/analysis/elliott";
 import { formatPrice } from "@/lib/format";
 
@@ -75,6 +75,61 @@ function sizingLine(s: ChainSizing | null, currency: string): string {
   return `[크기·기간]      엘리엇 파동: ${s.label}, 되돌림 목표가 범위 ${formatPrice(r.low, currency)}~${formatPrice(r.high, currency)}`;
 }
 
+/** Shared BOS/ChoCH-vs-anchor-direction verdict, used both for the live
+ * anchor (against the single latest event) and for any historical point
+ * (against the nearest event found after it — see `structureForPoint`). */
+function decideStructure(
+  anchorDirection: "up" | "down",
+  event: SmcEvent | null,
+  noEventReason: string | null,
+  currency: string,
+): ChainStructure {
+  const anchorDirKr = anchorDirection === "up" ? "상승" : "하락";
+  if (!event) {
+    return {
+      status: "no-signal",
+      label: "판단 보류",
+      detail: noEventReason ?? "뚜렷한 구조 전환·돌파가 없어 확인할 근거가 없음",
+    };
+  }
+  if (event.type === "ChoCH" && event.direction === anchorDirection) {
+    return {
+      status: "confirmed",
+      label: "구조 확인",
+      detail: `추세 방향이 실제로 ${anchorDirKr}으로 바뀌는 전환이 확인됨 — ${breakSentence(event, currency)}, 변곡점 예측과 같은 방향`,
+    };
+  }
+  if (event.type === "BOS" && event.direction !== anchorDirection) {
+    return {
+      status: "unconfirmed",
+      label: "미확인 — 페이크아웃 가능성",
+      detail: `기존 추세가 아직 이어지는 중(추세 지속 돌파) — ${breakSentence(event, currency)}, 변곡점 예측이 찍은 반전이 구조적으로는 아직 깨지지 않음`,
+    };
+  }
+  const eventDirKr = event.direction === "up" ? "상승" : "하락";
+  return {
+    status: "unconfirmed",
+    label: "미확인",
+    detail: `가장 최근 구조 변화가 ${eventDirKr} 방향이라 변곡점 예측의 ${anchorDirKr} 반전과 서로 맞지 않음`,
+  };
+}
+
+/** Structure-only confirmation for a historical (non-anchor) inflection
+ * point — every point popup can show "구조로도 확인되는가", not just the
+ * live anchor. Looks for the first structural event that happened at or
+ * after the point (a break BEFORE the point can't confirm a reversal it
+ * hadn't happened yet); sizing (Elliott target) stays anchor-only since a
+ * price target only makes sense for the current, still-live signal. */
+export function structureForPoint(point: InflectionPoint, events: SmcEvent[], currency: string): ChainStructure {
+  const next = events.find((e) => e.date >= point.date) ?? null;
+  return decideStructure(
+    point.direction,
+    next,
+    next ? null : "이 지점 이후 뚜렷한 구조 전환·돌파가 아직 없음",
+    currency,
+  );
+}
+
 export function ippContinuationChain(
   candles: Candle[],
   ipp: InflectionResult,
@@ -100,33 +155,12 @@ export function ippContinuationChain(
   // Step 2: structural confirmation — does the market's actual swing
   // structure back up the direction the inflection point called?
   const anchorDirKr = anchor.direction === "up" ? "상승" : "하락";
-  let structure: ChainStructure;
-  if (!smcResult.event) {
-    structure = {
-      status: "no-signal",
-      label: "판단 보류",
-      detail: smcResult.reason ?? "최근 구간에 뚜렷한 구조 전환·돌파가 없어 확인할 근거가 없음",
-    };
-  } else if (smcResult.event.type === "ChoCH" && smcResult.event.direction === anchor.direction) {
-    structure = {
-      status: "confirmed",
-      label: "구조 확인",
-      detail: `추세 방향이 실제로 ${anchorDirKr}으로 바뀌는 전환이 확인됨 — ${breakSentence(smcResult.event, currency)}, 변곡점 예측과 같은 방향`,
-    };
-  } else if (smcResult.event.type === "BOS" && smcResult.event.direction !== anchor.direction) {
-    structure = {
-      status: "unconfirmed",
-      label: "미확인 — 페이크아웃 가능성",
-      detail: `기존 추세가 아직 이어지는 중(추세 지속 돌파) — ${breakSentence(smcResult.event, currency)}, 변곡점 예측이 찍은 반전이 구조적으로는 아직 깨지지 않음`,
-    };
-  } else {
-    const eventDirKr = smcResult.event.direction === "up" ? "상승" : "하락";
-    structure = {
-      status: "unconfirmed",
-      label: "미확인",
-      detail: `가장 최근 구조 변화가 ${eventDirKr} 방향이라 변곡점 예측의 ${anchorDirKr} 반전과 서로 맞지 않음`,
-    };
-  }
+  const structure = decideStructure(
+    anchor.direction,
+    smcResult.event,
+    smcResult.reason ?? "최근 구간에 뚜렷한 구조 전환·돌파가 없어 확인할 근거가 없음",
+    currency,
+  );
 
   if (structure.status !== "confirmed") {
     const summary = [

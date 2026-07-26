@@ -23,7 +23,7 @@ import { detectHarmonic } from "@/lib/analysis/harmonic";
 import { ichimoku, type IchimokuResult } from "@/lib/analysis/ichimoku";
 import { elliottWave, type ElliottResult } from "@/lib/analysis/elliott";
 import { inflectionPoints, type InflectionResult } from "@/lib/analysis/inflection";
-import { smc, type SmcResult } from "@/lib/analysis/smc";
+import { smc, smcEvents, type SmcResult, type SmcEvent } from "@/lib/analysis/smc";
 import { ippContinuationChain, type IppChainResult } from "@/lib/analysis/ipp-chain";
 
 export interface AnalysisResult {
@@ -58,6 +58,11 @@ export interface AnalysisResult {
     elliottWave: ElliottResult | null;
     inflectionPoints: InflectionResult | null;
     smc: SmcResult | null;
+    /** Every BOS/ChoCH event in chronological order — lets the popup check
+     * structural confirmation for ANY inflection point, not just the live
+     * anchor (see ChartStack.tsx's openInflectionPopup + ipp-chain.ts's
+     * structureForPoint). */
+    smcEvents: SmcEvent[];
     /** ipp-continuation-chain: IPP(반전 시점) -> smc(구조 확인) ->
      * elliottWave(크기·기간) chained without merging into one score. Null
      * when any of the three prerequisite results is unavailable. */
@@ -150,8 +155,13 @@ export function analyze(input: AnalyzeInput): AnalysisResult {
   else unavailable["advanced.inflectionPoints"] = `need ${MIN_BARS.patterns} candles, have ${n}`;
 
   let smcResult: SmcResult | null = null;
-  if (n >= MIN_BARS.smc) smcResult = smc(candles);
-  else unavailable["advanced.smc"] = `need ${MIN_BARS.smc} candles, have ${n}`;
+  let smcEventsResult: SmcEvent[] = [];
+  if (n >= MIN_BARS.smc) {
+    smcResult = smc(candles);
+    smcEventsResult = smcEvents(candles);
+  } else {
+    unavailable["advanced.smc"] = `need ${MIN_BARS.smc} candles, have ${n}`;
+  }
 
   // ipp-continuation-chain: only runs once all three prerequisite modules
   // produced a result — chaining through a null leg would just be guessing.
@@ -189,6 +199,7 @@ export function analyze(input: AnalyzeInput): AnalysisResult {
       elliottWave: elliottResult,
       inflectionPoints: inflectionResult,
       smc: smcResult,
+      smcEvents: smcEventsResult,
       ippChain: ippChainResult,
     },
   };
