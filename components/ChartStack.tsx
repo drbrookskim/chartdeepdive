@@ -23,7 +23,7 @@ import { fetchOhlcv, type OhlcvResponse, type AnalysisResult, type Market } from
 import type { Pattern } from "@/lib/analysis/patterns";
 import { RULE_WEIGHTS, type InflectionPoint } from "@/lib/analysis/inflection";
 import { structureForPoint } from "@/lib/analysis/ipp-chain";
-import { forecastCandles } from "@/lib/analysis/forecast";
+import { forecastFromUserCandle, nextTradingDate, typicalBodySize, type ForecastResult } from "@/lib/analysis/forecast";
 import {
   categoryColorVar,
   formatAxisPrice,
@@ -365,20 +365,33 @@ export default function ChartStack({
   // rebuilds (toggling an unrelated layer recreates candleSeries too — see
   // the big rebuild effect below — so horizontals must be reapplied there
   // each time, not wiped).
-  const [drawMode, setDrawMode] = useState<"horizontal" | "trend" | null>(null);
-  // 가상 예측(hypothetical continuation scenario) — off by default, purely
-  // illustrative (see lib/analysis/forecast.ts). Not tied to LayerState/
-  // localStorage since it's a toy, not a real analysis layer worth
-  // persisting.
-  const [showForecast, setShowForecast] = useState(false);
-  const [forecastNote, setForecastNote] = useState<string | null>(null);
+  const [drawMode, setDrawMode] = useState<"horizontal" | "trend" | "forecast" | null>(null);
+  // 가상 예측(hypothetical continuation scenario) — the user draws ONE
+  // candle by dragging (drawMode "forecast"), then the rest is auto-
+  // continued from it on "완료" (see lib/analysis/forecast.ts). Not tied to
+  // LayerState/localStorage since it's a toy, not a real analysis layer
+  // worth persisting.
+  const [forecastResult, setForecastResult] = useState<ForecastResult | null>(null);
+  const [forecastHasDraft, setForecastHasDraft] = useState(false);
   const forecastSeriesRef = useRef<ReturnType<IChartApi["addCandlestickSeries"]> | null>(null);
+  const forecastDraftSeriesRef = useRef<ReturnType<IChartApi["addCandlestickSeries"]> | null>(null);
+  const forecastDragStartRef = useRef<number | null>(null);
+  const forecastDraftCandleRef = useRef<Candle | null>(null);
   const drawModeRef = useRef<typeof drawMode>(null);
   useEffect(() => {
     drawModeRef.current = drawMode;
     if (drawMode !== "trend") {
       trendPendingRef.current = null;
       if (trendPreviewRef.current) trendPreviewRef.current.innerHTML = "";
+    }
+    if (drawMode !== "forecast") {
+      forecastDragStartRef.current = null;
+      forecastDraftCandleRef.current = null;
+      setForecastHasDraft(false);
+      if (forecastDraftSeriesRef.current) {
+        mainApiRef.current?.removeSeries(forecastDraftSeriesRef.current);
+        forecastDraftSeriesRef.current = null;
+      }
     }
   }, [drawMode]);
   const [, setDrawingsTick] = useState(0);
@@ -1349,7 +1362,7 @@ export default function ChartStack({
       // on, reserve FORECAST_DAYS bars of room so the forecast candles
       // (appended past the last real bar) are actually visible instead of
       // sitting just off the right edge of the default view.
-      timeScale: { borderColor: border, rightOffset: showForecast ? FORECAST_DAYS : 0 },
+      timeScale: { borderColor: border, rightOffset: forecastResult ? FORECAST_DAYS : 0 },
       crosshair: { horzLine: { labelBackgroundColor: text } },
       // Desktop: zoom via mouse wheel only, drag is left/right pan only (no
       // vertical price-axis rescale-by-drag). Mobile has no wheel, so pinch
@@ -1418,35 +1431,27 @@ export default function ChartStack({
     // opacity so they read as "not real" at a glance. Purely illustrative;
     // see lib/analysis/forecast.ts for the toy rule and its disclaimer.
     forecastSeriesRef.current = null;
-    if (showForecast) {
-      const result = forecastCandles(effectiveCandles, FORECAST_DAYS);
-      if (result) {
-        const forecastSeries = main.addCandlestickSeries({
-          upColor: `${up}66`,
-          downColor: `${down}66`,
-          borderUpColor: `${up}66`,
-          borderDownColor: `${down}66`,
-          wickUpColor: `${up}66`,
-          wickDownColor: `${down}66`,
-          priceLineVisible: false,
-          lastValueVisible: false,
-        });
-        forecastSeries.setData(
-          result.candles.map((c) => ({
-            time: toChartTime(c.date, isIntraday),
-            open: c.open,
-            high: c.high,
-            low: c.low,
-            close: c.close,
-          })),
-        );
-        forecastSeriesRef.current = forecastSeries;
-        setForecastNote(result.note);
-      } else {
-        setForecastNote(null);
-      }
-    } else {
-      setForecastNote(null);
+    if (forecastResult) {
+      const forecastSeries = main.addCandlestickSeries({
+        upColor: `${up}66`,
+        downColor: `${down}66`,
+        borderUpColor: `${up}66`,
+        borderDownColor: `${down}66`,
+        wickUpColor: `${up}66`,
+        wickDownColor: `${down}66`,
+        priceLineVisible: false,
+        lastValueVisible: false,
+      });
+      forecastSeries.setData(
+        forecastResult.candles.map((c) => ({
+          time: toChartTime(c.date, isIntraday),
+          open: c.open,
+          high: c.high,
+          low: c.low,
+          close: c.close,
+        })),
+      );
+      forecastSeriesRef.current = forecastSeries;
     }
 
     // Re-apply user-drawn horizontal lines to the freshly-created series —
@@ -1592,7 +1597,7 @@ export default function ChartStack({
     // at the last REAL bar — the FORECAST_DAYS 가상 예측 candles are appended
     // past that as extra logical indices on the shared time scale, so nudge
     // the window right or they'd sit just past the visible edge.
-    if (showForecast) {
+    if (forecastResult) {
       const cur = main.timeScale().getVisibleLogicalRange();
       if (cur)
         main.timeScale().setVisibleLogicalRange({ from: cur.from + FORECAST_DAYS, to: cur.to + FORECAST_DAYS });
@@ -2312,6 +2317,18 @@ export default function ChartStack({
       restyleHit(target);
     };
     const onDrawMouseDown = (e: PointerEvent) => {
+      if (drawModeRef.current === "forecast") {
+        // Drag up/down = draw the anchor candle's body (open at mousedown,
+        // close wherever mouseup lands) — stop propagation so lightweight-
+        // charts' own drag-to-pan doesn't fight the gesture, same reasoning
+        // as the line-editing drag below.
+        e.preventDefault();
+        e.stopPropagation();
+        const { y } = localXY(e);
+        const price = candleSeriesRef.current?.coordinateToPrice(y);
+        if (price != null) forecastDragStartRef.current = price;
+        return;
+      }
       if (drawModeRef.current) return; // placing a new line takes priority
       const { x, y } = localXY(e);
       const hit = hitTestLines(x, y);
@@ -2399,6 +2416,48 @@ export default function ChartStack({
       const series = candleSeriesRef.current;
       const drag = dragRef.current;
       const { x, y } = localXY(e);
+      if (forecastDragStartRef.current != null && series) {
+        const startPrice = forecastDragStartRef.current;
+        const price = series.coordinateToPrice(y);
+        if (price != null) {
+          const lastReal = candles[candles.length - 1];
+          const open = startPrice;
+          const close = price;
+          const pad = Math.abs(close - open) * 0.15 || open * 0.002;
+          const draft: Candle = {
+            date: nextTradingDate(lastReal.date),
+            open,
+            close,
+            high: Math.max(open, close) + pad,
+            low: Math.min(open, close) - pad,
+            volume: lastReal.volume,
+            adjclose: null,
+          };
+          forecastDraftCandleRef.current = draft;
+          if (!forecastDraftSeriesRef.current && mainApiRef.current) {
+            forecastDraftSeriesRef.current = mainApiRef.current.addCandlestickSeries({
+              upColor: NEON,
+              downColor: NEON,
+              borderUpColor: NEON,
+              borderDownColor: NEON,
+              wickUpColor: NEON,
+              wickDownColor: NEON,
+              priceLineVisible: false,
+              lastValueVisible: false,
+            });
+          }
+          forecastDraftSeriesRef.current?.setData([
+            {
+              time: toChartTime(draft.date, isIntraday),
+              open: draft.open,
+              high: draft.high,
+              low: draft.low,
+              close: draft.close,
+            },
+          ]);
+        }
+        return;
+      }
       if (!drag) updatePreviewLine(x, y);
       if (mouseDownPosRef.current) {
         const moved = Math.hypot(x - mouseDownPosRef.current.x, y - mouseDownPosRef.current.y) > MOVE_CANCEL_PX;
@@ -2476,6 +2535,11 @@ export default function ChartStack({
       }
     };
     const onDrawMouseUp = () => {
+      if (forecastDragStartRef.current != null) {
+        forecastDragStartRef.current = null;
+        if (forecastDraftCandleRef.current) setForecastHasDraft(true);
+        return;
+      }
       if (longPressTimerRef.current) {
         clearTimeout(longPressTimerRef.current);
         longPressTimerRef.current = null;
@@ -2584,6 +2648,10 @@ export default function ChartStack({
       macdLineSeriesRef.current = null;
       candleSeriesRef.current = null;
       forecastSeriesRef.current = null;
+      // Not removeSeries()'d — the chart it belonged to is already being
+      // torn down below (c.remove()), which takes every series on it with
+      // it; just drop the stale reference.
+      forecastDraftSeriesRef.current = null;
       for (const u of unsubs) u();
       for (const c of charts) c.remove();
     };
@@ -2598,7 +2666,7 @@ export default function ChartStack({
     activeSubTab,
     zoomCandles,
     historyCandles,
-    showForecast,
+    forecastResult,
   ]);
 
   // Redraw pattern markers/shape-lines when the selection changes, without
@@ -2772,6 +2840,15 @@ export default function ChartStack({
     saveLines();
   }
 
+  // Finalizes 가상 예측: takes the candle the user just dragged out and
+  // auto-continues FORECAST_DAYS-1 more after it (see forecastFromUserCandle).
+  function confirmForecast() {
+    const draft = forecastDraftCandleRef.current;
+    if (!draft) return;
+    setForecastResult(forecastFromUserCandle(candles, draft, FORECAST_DAYS - 1));
+    setDrawMode(null);
+  }
+
   return (
     <>
       <div className="panel">
@@ -2806,14 +2883,32 @@ export default function ChartStack({
             전체 지우기
           </button>
           <button
-            className={showForecast ? "on" : ""}
-            onClick={() => setShowForecast((v) => !v)}
-            title="직전 장대양봉·장대음봉을 기준으로 규칙 기반 이어그린 가상 시나리오 — 실제 예측 아님"
+            className={drawMode === "forecast" || forecastResult ? "on" : ""}
+            onClick={() => {
+              if (forecastResult) {
+                setForecastResult(null);
+                return;
+              }
+              setDrawMode((m) => (m === "forecast" ? null : "forecast"));
+            }}
+            title="예측 캔들을 직접 그리고, 나머지는 규칙 기반으로 이어그리는 가상 시나리오 — 실제 예측 아님"
           >
-            가상 예측(5일)
+            {forecastResult ? "가상 예측 지우기" : "가상 예측(5일)"}
           </button>
+          {drawMode === "forecast" && (
+            <button onClick={confirmForecast} disabled={!forecastHasDraft} title="그린 캔들 기준으로 나머지를 이어그림">
+              완료
+            </button>
+          )}
         </div>
-        {showForecast && forecastNote && <div className="note-line">※ {forecastNote}</div>}
+        {drawMode === "forecast" && (
+          <div className="note-line">
+            ※ 메인 차트를 위/아래로 드래그해서 예측 캔들 하나를 그려주세요(다시 드래그하면
+            새로 그려집니다). 다 그렸으면 완료를 누르세요 — 그 캔들 기준으로 나머지{" "}
+            {FORECAST_DAYS - 1}거래일이 규칙 기반으로 자동으로 이어집니다.
+          </div>
+        )}
+        {forecastResult && <div className="note-line">※ {forecastResult.note}</div>}
         {(horizontalsRef.current.length > 0 || trendsRef.current.length > 0) && (
           <div className="drawinglist">
             {horizontalsRef.current.map((h, i) => (

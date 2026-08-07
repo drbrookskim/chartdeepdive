@@ -1,21 +1,22 @@
-// Hypothetical N-day continuation scenario — NOT a prediction. Deterministic
-// toy rule requested explicitly: find the most recent 장대양봉/장대음봉 (a
-// candle whose body is unusually large vs recent bars) and use ITS body
-// midpoint (open+close)/2 as the fixed 50% support/resistance reference —
-// staying on that candle's side reads as continuation, breaking through it
-// reads as trend reversal. Purely illustrative — see `ForecastResult.note`,
-// which the UI must surface verbatim next to the drawing.
+// Hypothetical N-day continuation scenario — NOT a prediction. The user
+// draws ONE candle by hand (its body's open/close come straight from their
+// drag); this module just continues from it. Deterministic toy rule:
+// the drawn candle's body midpoint (open+close)/2 is treated as a fixed
+// support/resistance line — staying on that candle's side reads as
+// continuation, breaking through it reads as trend reversal. Purely
+// illustrative — see `ForecastResult.note`, which the UI must surface
+// verbatim next to the drawing.
 
 import type { Candle } from "@/lib/schema";
 
 export interface ForecastResult {
+  /** Full scenario, in order — candles[0] is the user-drawn anchor. */
   candles: Candle[];
-  /** The 장대양봉/장대음봉 this scenario anchors off of. */
   anchor: Candle;
   note: string;
 }
 
-function nextTradingDate(lastDate: string): string {
+export function nextTradingDate(lastDate: string): string {
   const d = new Date(lastDate + "T00:00:00Z");
   do {
     d.setUTCDate(d.getUTCDate() + 1);
@@ -27,39 +28,28 @@ function bodyMid(c: Candle): number {
   return (c.open + c.close) / 2;
 }
 
-const LOOKBACK = 20;
-/** A candle counts as 장대(long-bodied) once its body is this many times
- * the recent average body size. */
-const BIG_BODY_MULT = 1.5;
-
-/** Most recent candle whose body stands out from its neighbors — scans
- * backward from the last bar; falls back to the last bar itself if nothing
- * in the lookback window qualifies (e.g. a very flat, choppy stretch). */
-function findAnchorCandle(candles: Candle[]): Candle {
-  const window = candles.slice(-LOOKBACK);
-  const avgBody = window.reduce((s, c) => s + Math.abs(c.close - c.open), 0) / window.length;
-  for (let i = window.length - 1; i >= 0; i--) {
-    if (Math.abs(window[i].close - window[i].open) > avgBody * BIG_BODY_MULT) return window[i];
-  }
-  return candles[candles.length - 1];
+/** Typical daily body size over the recent real candles — sizes the
+ * auto-continued candles so they look like this stock's actual daily
+ * moves, not an arbitrary fixed step. */
+export function typicalBodySize(candles: Candle[]): number {
+  const recent = candles.slice(-10);
+  if (!recent.length) return 0;
+  const avg = recent.reduce((s, c) => s + Math.abs(c.close - c.open), 0) / recent.length;
+  return avg || recent[recent.length - 1].close * 0.005;
 }
 
-export function forecastCandles(candles: Candle[], days = 5): ForecastResult | null {
-  if (candles.length < 6) return null;
-
-  const last = candles[candles.length - 1];
-  const anchor = findAnchorCandle(candles);
-  const refLevel = bodyMid(anchor);
-  let bias: "up" | "down" = anchor.close >= anchor.open ? "up" : "down";
-
-  // Typical daily body size over the recent window — sizes the synthetic
-  // candles so they look like this stock's actual daily moves, not an
-  // arbitrary fixed step.
-  const recent = candles.slice(-10);
-  const avgBody = recent.reduce((s, c) => s + Math.abs(c.close - c.open), 0) / recent.length || last.close * 0.005;
-
+/** Continues `days` more candles after `prev`, re-checking `refLevel` (a
+ * fixed price, not recomputed per step) each time to decide whether the
+ * scenario keeps going the same way or flips. */
+function continueScenario(
+  refLevel: number,
+  initialBias: "up" | "down",
+  prev: Candle,
+  avgBody: number,
+  days: number,
+): Candle[] {
+  let bias = initialBias;
   const out: Candle[] = [];
-  let prev = last;
   for (let i = 0; i < days; i++) {
     const open = prev.close;
     const close = bias === "up" ? open + avgBody * 0.6 : open - avgBody * 0.6;
@@ -68,20 +58,27 @@ export function forecastCandles(candles: Candle[], days = 5): ForecastResult | n
     const date = nextTradingDate(prev.date);
     const candle: Candle = { date, open, high, low, close, volume: prev.volume, adjclose: null };
     out.push(candle);
-
-    // Re-check the SAME anchor candle's 50% line for the next step (not a
-    // rolling comparison against whichever bar came right before it).
     bias = bias === "up" ? (low > refLevel ? "up" : "down") : high < refLevel ? "down" : "up";
     prev = candle;
   }
+  return out;
+}
 
+/** User draws the first candle by hand (drag = open/close, small padding =
+ * high/low); this auto-continues `moreDays` more after it using the SAME
+ * 50%-of-the-drawn-candle rule the old auto-anchor version used, just with
+ * the anchor now chosen by the user instead of detected automatically. */
+export function forecastFromUserCandle(candles: Candle[], userCandle: Candle, moreDays: number): ForecastResult {
+  const refLevel = bodyMid(userCandle);
+  const bias: "up" | "down" = userCandle.close >= userCandle.open ? "up" : "down";
+  const avgBody = typicalBodySize(candles);
+  const rest = continueScenario(refLevel, bias, userCandle, avgBody, moreDays);
   return {
-    candles: out,
-    anchor,
+    candles: [userCandle, ...rest],
+    anchor: userCandle,
     note:
-      `가상 시나리오입니다 — 실제 예측이 아닙니다. ${anchor.date}의 ` +
-      `${anchor.close >= anchor.open ? "장대양봉" : "장대음봉"}(직전 구간에서 가장 몸통이 큰 캔들) 몸통 ` +
-      "50% 지점을 지지/저항으로 보고, 이를 지키면 추세 지속, 깨면 추세 전환으로 가정해 " +
-      `기계적으로 이어그린 ${days}거래일치 캔들일 뿐입니다.`,
+      `가상 시나리오입니다 — 실제 예측이 아닙니다. 직접 그리신 ${userCandle.date} 캔들(` +
+      `${bias === "up" ? "양봉" : "음봉"}) 몸통 50% 지점을 지지/저항으로 보고, 이를 지키면 추세 지속, ` +
+      `깨면 추세 전환으로 가정해 기계적으로 이어그린 나머지 ${moreDays}거래일치 캔들입니다.`,
   };
 }
