@@ -2289,15 +2289,39 @@ export default function ChartStack({
         dragRef.current = hit;
       }, LONG_PRESS_MS);
     };
-    // Live rubber-band line from the first trend-line click to the current
-    // cursor, so the user sees where the line will land before the second
-    // click — a single reused <line> in its own overlay (not userLinesRef,
-    // which drawUserLines() prunes to exactly trendsRef.current.length).
-    const updateTrendPreview = (mx: number, my: number) => {
+    // Live preview of whichever drawing tool is active, so the user sees
+    // where a line will land before actually placing it — a single reused
+    // <line> in its own overlay (not userLinesRef, which drawUserLines()
+    // prunes to exactly trendsRef.current.length). Horizontal: full-width
+    // line tracking the cursor's Y (no click needed yet — every mode is a
+    // "first click" for horizontal). Trend: rubber-band from the first
+    // click's anchor to the cursor, shown only once that anchor exists.
+    const updatePreviewLine = (mx: number, my: number) => {
       const svg = trendPreviewRef.current;
       if (!svg) return;
+      const mode = drawModeRef.current;
+      const getLine = () => {
+        let line = svg.firstChild as SVGLineElement | null;
+        if (!line) {
+          line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+          line.setAttribute("stroke", NEON);
+          line.setAttribute("stroke-width", "2");
+          line.setAttribute("stroke-dasharray", "4 3");
+          svg.appendChild(line);
+        }
+        return line;
+      };
+      if (mode === "horizontal") {
+        const line = getLine();
+        const width = mainRef.current?.clientWidth ?? 0;
+        line.setAttribute("x1", "0");
+        line.setAttribute("y1", String(my));
+        line.setAttribute("x2", String(width));
+        line.setAttribute("y2", String(my));
+        return;
+      }
       const pending = trendPendingRef.current;
-      if (drawModeRef.current !== "trend" || !pending) {
+      if (mode !== "trend" || !pending) {
         svg.innerHTML = "";
         return;
       }
@@ -2307,14 +2331,7 @@ export default function ChartStack({
         svg.innerHTML = "";
         return;
       }
-      let line = svg.firstChild as SVGLineElement | null;
-      if (!line) {
-        line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-        line.setAttribute("stroke", NEON);
-        line.setAttribute("stroke-width", "2");
-        line.setAttribute("stroke-dasharray", "4 3");
-        svg.appendChild(line);
-      }
+      const line = getLine();
       line.setAttribute("x1", String(x1));
       line.setAttribute("y1", String(y1));
       line.setAttribute("x2", String(mx));
@@ -2325,7 +2342,7 @@ export default function ChartStack({
       const series = candleSeriesRef.current;
       const drag = dragRef.current;
       const { x, y } = localXY(e);
-      if (!drag) updateTrendPreview(x, y);
+      if (!drag) updatePreviewLine(x, y);
       if (mouseDownPosRef.current) {
         const moved = Math.hypot(x - mouseDownPosRef.current.x, y - mouseDownPosRef.current.y) > MOVE_CANCEL_PX;
         if (moved) {
