@@ -23,6 +23,7 @@ import { fetchOhlcv, type OhlcvResponse, type AnalysisResult, type Market } from
 import type { Pattern } from "@/lib/analysis/patterns";
 import { RULE_WEIGHTS, type InflectionPoint } from "@/lib/analysis/inflection";
 import { structureForPoint } from "@/lib/analysis/ipp-chain";
+import { forecastCandles } from "@/lib/analysis/forecast";
 import {
   categoryColorVar,
   formatAxisPrice,
@@ -364,6 +365,12 @@ export default function ChartStack({
   // the big rebuild effect below — so horizontals must be reapplied there
   // each time, not wiped).
   const [drawMode, setDrawMode] = useState<"horizontal" | "trend" | null>(null);
+  // 가상 예측(hypothetical continuation scenario) — off by default, purely
+  // illustrative (see lib/analysis/forecast.ts). Not tied to LayerState/
+  // localStorage since it's a toy, not a real analysis layer worth
+  // persisting.
+  const [showForecast, setShowForecast] = useState(false);
+  const forecastSeriesRef = useRef<ReturnType<IChartApi["addCandlestickSeries"]> | null>(null);
   const drawModeRef = useRef<typeof drawMode>(null);
   useEffect(() => {
     drawModeRef.current = drawMode;
@@ -1336,8 +1343,11 @@ export default function ChartStack({
       },
       rightPriceScale: { borderColor: border },
       // rightOffset 0: the latest bar sits flush against the right axis
-      // instead of floating a few bars in from the edge.
-      timeScale: { borderColor: border, rightOffset: 0 },
+      // instead of floating a few bars in from the edge. When 가상 예측 is
+      // on, reserve 3 bars of room so the forecast candles (appended past
+      // the last real bar) are actually visible instead of sitting just off
+      // the right edge of the default view.
+      timeScale: { borderColor: border, rightOffset: showForecast ? 3 : 0 },
       crosshair: { horzLine: { labelBackgroundColor: text } },
       // Desktop: zoom via mouse wheel only, drag is left/right pan only (no
       // vertical price-axis rescale-by-drag). Mobile has no wheel, so pinch
@@ -1400,6 +1410,37 @@ export default function ChartStack({
       })),
     );
     candleSeriesRef.current = candleSeries;
+
+    // ---- 가상 예측(hypothetical continuation scenario) — muted/translucent
+    // candles appended after the real data, same up/down palette at ~40%
+    // opacity so they read as "not real" at a glance. Purely illustrative;
+    // see lib/analysis/forecast.ts for the toy rule and its disclaimer.
+    forecastSeriesRef.current = null;
+    if (showForecast) {
+      const result = forecastCandles(effectiveCandles, 3);
+      if (result) {
+        const forecastSeries = main.addCandlestickSeries({
+          upColor: `${up}66`,
+          downColor: `${down}66`,
+          borderUpColor: `${up}66`,
+          borderDownColor: `${down}66`,
+          wickUpColor: `${up}66`,
+          wickDownColor: `${down}66`,
+          priceLineVisible: false,
+          lastValueVisible: false,
+        });
+        forecastSeries.setData(
+          result.candles.map((c) => ({
+            time: toChartTime(c.date, isIntraday),
+            open: c.open,
+            high: c.high,
+            low: c.low,
+            close: c.close,
+          })),
+        );
+        forecastSeriesRef.current = forecastSeries;
+      }
+    }
 
     // Re-apply user-drawn horizontal lines to the freshly-created series —
     // this effect recreates candleSeries on every rebuild (any layer toggle,
@@ -1540,6 +1581,14 @@ export default function ChartStack({
       }
     }
     applyDefaultRange();
+    // Whichever branch applyDefaultRange took, its "to" index still points
+    // at the last REAL bar — the 3 가상 예측 candles are appended past that
+    // as extra logical indices on the shared time scale, so nudge the
+    // window right by `days` or they'd sit just past the visible edge.
+    if (showForecast) {
+      const cur = main.timeScale().getVisibleLogicalRange();
+      if (cur) main.timeScale().setVisibleLogicalRange({ from: cur.from + 3, to: cur.to + 3 });
+    }
 
     // ---- OHLC hover legend ----
     function updateOhlc(c: Candle | undefined) {
@@ -2526,6 +2575,7 @@ export default function ChartStack({
       obvSeriesRef.current = null;
       macdLineSeriesRef.current = null;
       candleSeriesRef.current = null;
+      forecastSeriesRef.current = null;
       for (const u of unsubs) u();
       for (const c of charts) c.remove();
     };
@@ -2540,6 +2590,7 @@ export default function ChartStack({
     activeSubTab,
     zoomCandles,
     historyCandles,
+    showForecast,
   ]);
 
   // Redraw pattern markers/shape-lines when the selection changes, without
@@ -2746,7 +2797,21 @@ export default function ChartStack({
           >
             전체 지우기
           </button>
+          <button
+            className={showForecast ? "on" : ""}
+            onClick={() => setShowForecast((v) => !v)}
+            title="최근 캔들 패턴을 규칙 기반으로 이어그린 가상 시나리오 — 실제 예측 아님"
+          >
+            가상 예측(3일)
+          </button>
         </div>
+        {showForecast && (
+          <div className="note-line">
+            ※ 가상 시나리오입니다 — 실제 예측이 아닙니다. 직전 캔들 몸통의 50% 지점을
+            지지·저항으로 보고, 지키면 추세 지속·깨면 추세 전환으로 가정해 기계적으로
+            이어그린 3거래일치 캔들일 뿐입니다.
+          </div>
+        )}
         {(horizontalsRef.current.length > 0 || trendsRef.current.length > 0) && (
           <div className="drawinglist">
             {horizontalsRef.current.map((h, i) => (
