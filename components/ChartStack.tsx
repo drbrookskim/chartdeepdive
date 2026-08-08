@@ -379,15 +379,19 @@ export default function ChartStack({
   const forecastSeriesRef = useRef<ReturnType<IChartApi["addCandlestickSeries"]> | null>(null);
   const forecastDraftSeriesRef = useRef<ReturnType<IChartApi["addCandlestickSeries"]> | null>(null);
   const forecastDragStartRef = useRef<number | null>(null);
-  /** Which part of the draft candle the current drag is editing — the body,
-   * or one of the two wicks (chosen by where the drag started relative to
-   * the body already on screen). */
-  const forecastDragPartRef = useRef<"body" | "upper" | "lower">("body");
+  /** Which part of the draft candle a drag edits. Explicitly picked in the
+   * toolbar rather than inferred from where the drag started — a thin body
+   * made the positional guess wrong most of the time (nearly every drag
+   * landed outside the body and got treated as a wick). */
+  const [forecastPart, setForecastPart] = useState<"body" | "upper" | "lower">("body");
+  const forecastPartRef = useRef(forecastPart);
+  useEffect(() => {
+    forecastPartRef.current = forecastPart;
+  }, [forecastPart]);
   const forecastDraftCandleRef = useRef<Candle | null>(null);
-  // Read inside the chart-creation effect (which doesn't depend on drawMode)
-  // to decide the initial rightOffset; kept in a ref so entering/leaving
-  // forecast mode doesn't force a full chart rebuild.
-  const forecastActiveRef = useRef(false);
+  /** Visible range from just before forecast mode widened it, so clearing
+   * the forecast puts the user back exactly where they were. */
+  const preForecastRangeRef = useRef<{ from: number; to: number } | null>(null);
   const drawModeRef = useRef<typeof drawMode>(null);
   useEffect(() => {
     drawModeRef.current = drawMode;
@@ -399,6 +403,7 @@ export default function ChartStack({
       forecastDragStartRef.current = null;
       forecastDraftCandleRef.current = null;
       setForecastHasDraft(false);
+      setForecastPart("body"); // next session starts on 몸통 again
       if (forecastDraftSeriesRef.current) {
         mainApiRef.current?.removeSeries(forecastDraftSeriesRef.current);
         forecastDraftSeriesRef.current = null;
@@ -406,16 +411,6 @@ export default function ChartStack({
     }
   }, [drawMode]);
 
-  // Reserve (or release) the right-hand room the 가상 예측 bars need, the
-  // moment forecast mode is entered/left — applyOptions only, never a
-  // rebuild, so the user's pan/zoom (bar width) is untouched: the bars just
-  // shift left to open up blank space on the right. Doing it here rather
-  // than on 완료 is what keeps confirming the scenario view-neutral.
-  const forecastActive = drawMode === "forecast" || forecastResult != null;
-  useEffect(() => {
-    forecastActiveRef.current = forecastActive;
-    mainApiRef.current?.timeScale().applyOptions({ rightOffset: forecastActive ? FORECAST_DAYS : 0 });
-  }, [forecastActive]);
   const [, setDrawingsTick] = useState(0);
   // Brief visual "pressed" flash on the 전체 지우기 button after a real click
   // (:active alone barely shows for a fast click) — reverts on its own.
@@ -546,6 +541,31 @@ export default function ChartStack({
   useEffect(() => {
     preservedRangeRef.current = null;
   }, [symbol, market]);
+
+  // Make room for the 가상 예측 bars the moment forecast mode is entered — by
+  // EXTENDING the visible range to the right, not by scrolling it. The left
+  // edge (and every bar the user was already looking at) stays put; only a
+  // few empty slots are added on the right. A rightOffset bump would have
+  // scrolled instead, sliding bars off the left edge. Done on entry rather
+  // than on 완료 so confirming the scenario is completely view-neutral, and
+  // the pre-forecast range is restored when the forecast is cleared.
+  const forecastActive = drawMode === "forecast" || forecastResult != null;
+  useEffect(() => {
+    const main = mainApiRef.current;
+    if (!main) return;
+    const cur = main.timeScale().getVisibleLogicalRange();
+    if (!cur) return;
+    if (forecastActive) {
+      const lastIdx = (zoomCandles ?? historyCandles ?? candles).length - 1;
+      const needTo = lastIdx + FORECAST_DAYS;
+      if (cur.to >= needTo) return; // already enough blank space — leave it alone
+      preForecastRangeRef.current = { from: cur.from, to: cur.to };
+      main.timeScale().setVisibleLogicalRange({ from: cur.from, to: needTo });
+    } else if (preForecastRangeRef.current) {
+      main.timeScale().setVisibleLogicalRange(preForecastRangeRef.current);
+      preForecastRangeRef.current = null;
+    }
+  }, [forecastActive, candles, historyCandles, zoomCandles]);
 
   const closeDetailPopup = useCallback(() => {
     openDetailKeyRef.current = null;
@@ -1380,11 +1400,10 @@ export default function ChartStack({
       },
       rightPriceScale: { borderColor: border },
       // rightOffset 0: the latest bar sits flush against the right axis
-      // instead of floating a few bars in from the edge. 가상 예측 mode
-      // reserves FORECAST_DAYS bars of room instead — applied when the user
-      // ENTERS draw mode (see the effect below), not on 완료, so confirming
-      // the scenario never moves the view out from under them.
-      timeScale: { borderColor: border, rightOffset: forecastActiveRef.current ? FORECAST_DAYS : 0 },
+      // instead of floating a few bars in from the edge. 가상 예측 makes its
+      // own room by widening the visible range instead (see the effect
+      // above), which leaves the bars the user was looking at where they are.
+      timeScale: { borderColor: border, rightOffset: 0 },
       crosshair: { horzLine: { labelBackgroundColor: text } },
       // Desktop: zoom via mouse wheel only, drag is left/right pan only (no
       // vertical price-axis rescale-by-drag). Mobile has no wheel, so pinch
@@ -2341,30 +2360,90 @@ export default function ChartStack({
       editingLineRef.current = null;
       restyleHit(target);
     };
+    // Applies one pointer price to the 가상 예측 draft candle, editing
+    // whichever part the toolbar has selected. Shared by pointerdown (so a
+    // plain click sets a wick) and pointermove (so dragging refines it).
+    const updateForecastDraft = (price: number) => {
+      const lastReal = candles[candles.length - 1];
+      const prev = forecastDraftCandleRef.current;
+      // No body yet? Then there's nothing for a wick to hang off — the first
+      // gesture always draws the body, whatever the toolbar says.
+      const part = prev ? forecastPartRef.current : "body";
+      let draft: Candle;
+      if (part !== "body" && prev) {
+        // Wick — the body stays put and the pulled end can't cross into it.
+        const bodyTop = Math.max(prev.open, prev.close);
+        const bodyBottom = Math.min(prev.open, prev.close);
+        draft = {
+          ...prev,
+          high: part === "upper" ? Math.max(bodyTop, price) : prev.high,
+          low: part === "lower" ? Math.min(bodyBottom, price) : prev.low,
+        };
+      } else {
+        // Body — the drag's two prices give the body's RANGE; the 양봉/음봉
+        // toggle decides which end is open and which is close, so the color
+        // always matches what the user picked regardless of drag direction.
+        // Any wicks already drawn are kept, just widened if the new body
+        // grew past them.
+        const startPrice = forecastDragStartRef.current ?? price;
+        const hi = Math.max(startPrice, price);
+        const lo = Math.min(startPrice, price);
+        const isUp = forecastDirRef.current === "up";
+        draft = {
+          date: nextTradingDate(lastReal.date),
+          open: isUp ? lo : hi,
+          close: isUp ? hi : lo,
+          high: Math.max(hi, prev?.high ?? hi),
+          low: Math.min(lo, prev?.low ?? lo),
+          volume: lastReal.volume,
+          adjclose: null,
+        };
+      }
+      forecastDraftCandleRef.current = draft;
+      if (!forecastDraftSeriesRef.current && mainApiRef.current) {
+        // Real up/down fill so the 양봉/음봉 choice is obvious at a glance,
+        // neon border/wick to mark it as the still-being-drawn draft rather
+        // than a committed candle.
+        forecastDraftSeriesRef.current = mainApiRef.current.addCandlestickSeries({
+          upColor: up,
+          downColor: down,
+          borderUpColor: NEON,
+          borderDownColor: NEON,
+          wickUpColor: NEON,
+          wickDownColor: NEON,
+          priceLineVisible: false,
+          lastValueVisible: false,
+        });
+      }
+      forecastDraftSeriesRef.current?.setData([
+        {
+          time: toChartTime(draft.date, isIntraday),
+          open: draft.open,
+          high: draft.high,
+          low: draft.low,
+          close: draft.close,
+        },
+      ]);
+    };
+
     const onDrawMouseDown = (e: PointerEvent) => {
       if (drawModeRef.current === "forecast") {
-        // Drag up/down draws the anchor candle. Which PART it edits depends
-        // on where the drag starts relative to the body already on screen:
-        // above it stretches the upper wick, below it the lower wick, and
-        // anywhere else (or with no body yet) redraws the body itself — so
-        // 몸통/윗꼬리/아랫꼬리 all work without extra tool buttons.
-        // stopPropagation so lightweight-charts' own drag-to-pan doesn't
-        // fight the gesture, same reasoning as the line-editing drag below.
+        // Drag up/down draws whichever part (몸통/윗꼬리/아랫꼬리) is selected
+        // in the toolbar. stopPropagation so lightweight-charts' own
+        // drag-to-pan doesn't fight the gesture, same reasoning as the
+        // line-editing drag below.
         e.preventDefault();
         e.stopPropagation();
         const { y } = localXY(e);
         const price = candleSeriesRef.current?.coordinateToPrice(y);
         if (price == null) return;
-        const draft = forecastDraftCandleRef.current;
-        const bodyTop = draft ? Math.max(draft.open, draft.close) : null;
-        const bodyBottom = draft ? Math.min(draft.open, draft.close) : null;
-        forecastDragPartRef.current =
-          bodyTop != null && price > bodyTop
-            ? "upper"
-            : bodyBottom != null && price < bodyBottom
-              ? "lower"
-              : "body";
         forecastDragStartRef.current = price;
+        // A wick is a single value, so a plain click is enough — apply it
+        // right away instead of waiting for a drag that may never come.
+        if (forecastPartRef.current !== "body" && forecastDraftCandleRef.current) {
+          updateForecastDraft(price);
+          setForecastHasDraft(true);
+        }
         return;
       }
       if (drawModeRef.current) return; // placing a new line takes priority
@@ -2455,69 +2534,8 @@ export default function ChartStack({
       const drag = dragRef.current;
       const { x, y } = localXY(e);
       if (forecastDragStartRef.current != null && series) {
-        const startPrice = forecastDragStartRef.current;
         const price = series.coordinateToPrice(y);
-        if (price != null) {
-          const lastReal = candles[candles.length - 1];
-          const prev = forecastDraftCandleRef.current;
-          const part = forecastDragPartRef.current;
-          let draft: Candle;
-          if (part !== "body" && prev) {
-            // Wick drag — body stays put, only the one end being pulled moves
-            // (and it can never cross into the body).
-            const bodyTop = Math.max(prev.open, prev.close);
-            const bodyBottom = Math.min(prev.open, prev.close);
-            draft = {
-              ...prev,
-              high: part === "upper" ? Math.max(bodyTop, price) : prev.high,
-              low: part === "lower" ? Math.min(bodyBottom, price) : prev.low,
-            };
-          } else {
-            // Body drag — the two dragged prices give the body's RANGE; the
-            // 양봉/음봉 toggle decides which end is open and which is close,
-            // so the candle's color always matches what the user picked
-            // regardless of which direction they happened to drag. Wicks
-            // reset to the body edges; the user adds them by dragging again
-            // above/below the body.
-            const hi = Math.max(startPrice, price);
-            const lo = Math.min(startPrice, price);
-            const up = forecastDirRef.current === "up";
-            draft = {
-              date: nextTradingDate(lastReal.date),
-              open: up ? lo : hi,
-              close: up ? hi : lo,
-              high: hi,
-              low: lo,
-              volume: lastReal.volume,
-              adjclose: null,
-            };
-          }
-          forecastDraftCandleRef.current = draft;
-          if (!forecastDraftSeriesRef.current && mainApiRef.current) {
-            // Real up/down fill so the 양봉/음봉 choice is obvious at a
-            // glance, neon border/wick to mark it as the still-being-drawn
-            // draft rather than a committed candle.
-            forecastDraftSeriesRef.current = mainApiRef.current.addCandlestickSeries({
-              upColor: up,
-              downColor: down,
-              borderUpColor: NEON,
-              borderDownColor: NEON,
-              wickUpColor: NEON,
-              wickDownColor: NEON,
-              priceLineVisible: false,
-              lastValueVisible: false,
-            });
-          }
-          forecastDraftSeriesRef.current?.setData([
-            {
-              time: toChartTime(draft.date, isIntraday),
-              open: draft.open,
-              high: draft.high,
-              low: draft.low,
-              close: draft.close,
-            },
-          ]);
-        }
+        if (price != null) updateForecastDraft(price);
         return;
       }
       if (!drag) updatePreviewLine(x, y);
@@ -2938,6 +2956,29 @@ export default function ChartStack({
               >
                 음봉
               </button>
+              <button
+                className={forecastPart === "body" ? "on" : ""}
+                onClick={() => setForecastPart("body")}
+                title="드래그로 몸통을 그림"
+              >
+                몸통
+              </button>
+              <button
+                className={forecastPart === "upper" ? "on" : ""}
+                onClick={() => setForecastPart("upper")}
+                disabled={!forecastHasDraft}
+                title="클릭·드래그한 높이까지 윗꼬리를 늘림"
+              >
+                윗꼬리
+              </button>
+              <button
+                className={forecastPart === "lower" ? "on" : ""}
+                onClick={() => setForecastPart("lower")}
+                disabled={!forecastHasDraft}
+                title="클릭·드래그한 높이까지 아랫꼬리를 늘림"
+              >
+                아랫꼬리
+              </button>
               <button onClick={confirmForecast} disabled={!forecastHasDraft} title="그린 캔들 기준으로 나머지를 이어그림">
                 완료
               </button>
@@ -2946,10 +2987,10 @@ export default function ChartStack({
         </div>
         {drawMode === "forecast" && (
           <div className="note-line">
-            ※ 양봉·음봉을 고른 뒤 메인 차트를 위/아래로 드래그해서 캔들 몸통을 그려주세요.
-            몸통 위쪽에서 드래그하면 윗꼬리가, 아래쪽에서 드래그하면 아랫꼬리가 붙습니다(몸통
-            안에서 다시 드래그하면 몸통을 새로 그립니다). 다 그렸으면 완료를 누르세요 — 그 캔들
-            기준으로 나머지 {FORECAST_DAYS - 1}거래일이 규칙 기반으로 자동으로 이어집니다.
+            ※ 양봉·음봉을 고르고 <b>몸통</b> 상태에서 메인 차트를 위/아래로 드래그해 몸통을
+            그립니다. 그다음 <b>윗꼬리</b>·<b>아랫꼬리</b>를 누르고 원하는 높이를 클릭(또는
+            드래그)하면 그만큼 꼬리가 붙습니다. 다 그렸으면 완료를 누르세요 — 그 캔들 기준으로
+            나머지 {FORECAST_DAYS - 1}거래일이 규칙 기반으로 자동으로 이어집니다.
           </div>
         )}
         {forecastResult && <div className="note-line">※ {forecastResult.note}</div>}

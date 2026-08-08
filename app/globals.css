@@ -914,6 +914,7 @@ button {
 }
 .drawtools {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   padding: 6px 12px;
   background: var(--surface-2);
