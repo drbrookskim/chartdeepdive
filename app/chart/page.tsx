@@ -150,11 +150,6 @@ function ChartInner() {
     }
   }, [showPatterns]);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
-  // Set whenever a pattern is just checked on — tells ChartStack to pan to
-  // it (keeping the user's current zoom level, not resetting it). seq forces
-  // a fresh object even if the same pattern is re-checked twice in a row.
-  const [focusPattern, setFocusPattern] = useState<{ p: Pattern; seq: number } | null>(null);
-  const focusSeqRef = useRef(0);
   const [showSignals, setShowSignals] = useState(false);
   const [sheetCollapsed, setSheetCollapsed] = useState(true);
 
@@ -353,8 +348,6 @@ function ChartInner() {
         next.delete(key);
       } else {
         next.add(key);
-        const found = patternsWithKeys.find((x) => x.key === key);
-        if (found) setFocusPattern({ p: found.p, seq: ++focusSeqRef.current });
       }
       return next;
     });
@@ -482,7 +475,6 @@ function ChartInner() {
               analysis={analysis}
               layers={layers}
               selectedPatterns={selectedPatterns}
-              focusPattern={focusPattern}
               themeVersion={themeVersion}
               onMainHeightChange={setMainHeight}
             />
