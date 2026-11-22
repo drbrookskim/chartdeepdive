@@ -29,7 +29,7 @@ export const metadata: Metadata = {
 };
 
 // Apply the saved theme before first paint to avoid a light/dark flash.
-const themeInit = `(function(){try{var t=localStorage.getItem('cdd-theme');if(t==='dark'||t==='light'){document.documentElement.setAttribute('data-theme',t);}}catch(e){}})();`;
+const themeInit = `(function(){try{var q=new URLSearchParams(location.search).get('theme');if(q==='dark'||q==='light'){localStorage.setItem('cdd-theme',q);}var t=q||localStorage.getItem('cdd-theme');if(t==='dark'||t==='light'){document.documentElement.setAttribute('data-theme',t);}}catch(e){}})();`;
 
 export default function RootLayout({
   children,
