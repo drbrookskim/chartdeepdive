@@ -174,7 +174,6 @@ function ChartInner() {
     }));
     setShowPatterns(false);
   }, [session, sessionStatus]);
-  const [researching, setResearching] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [markets, setMarkets] = useState<{ KR: boolean; US: boolean }>({
     KR: true,
@@ -328,14 +327,14 @@ function ChartInner() {
   }, [ohlcv]);
 
   function toggleLayer(key: keyof LayerState) {
-    if (!session && key !== "ma") {
+    if (false && !session && key !== "ma") {
       setShowAuthPrompt(true);
       return;
     }
     setLayers((prev) => ({ ...prev, [key]: !prev[key] }));
   }
   function togglePatterns() {
-    if (!session) {
+    if (false && !session) {
       setShowAuthPrompt(true);
       return;
     }
@@ -360,7 +359,6 @@ function ChartInner() {
   }
   function selectSearch(r: SearchResult) {
     pushRecent(r);
-    setResearching(false);
     const qs = new URLSearchParams({
       symbol: r.symbol,
       market: r.market,
@@ -381,23 +379,12 @@ function ChartInner() {
           <span className="appbar__back-short" aria-hidden="true">‹</span>
         </button>
         <div className="appbar__center">
-          {researching ? (
-            <SearchBox
-              onSelect={selectSearch}
-              placeholder={`${displayName} 대신 검색…`}
-              markets={markets}
-              autoFocus
-              onBlurClose={() => setResearching(false)}
-            />
-          ) : (
-            <button
-              className="appbar__id"
-              onClick={() => setResearching(true)}
-              title="다른 종목 검색"
-            >
-              🔍 {displayName} · {exchange || market} · {symbol} ▾
-            </button>
-          )}
+          <SearchBox
+            onSelect={selectSearch}
+            placeholder="종목명 또는 티커 검색..."
+            markets={markets}
+            commandMode
+          />
         </div>
         <div className="marketchip" role="group" aria-label="시장 필터">
           <button
