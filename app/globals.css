@@ -85,6 +85,10 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
+    --cb-bg: #1c212e; --cb-bg-hover: #252b3b;
+    --cb-text: rgba(255,255,255,.85); --cb-strong: #fff;
+    --cb-placeholder: rgba(255,255,255,.38); --cb-muted: rgba(255,255,255,.52);
+    --cb-key: rgba(255,255,255,.08); --cb-key-on: rgba(255,255,255,.22);
     --bg: #101010;
     --surface: #1a1a1a;
     --surface-2: #1a1a1a;
