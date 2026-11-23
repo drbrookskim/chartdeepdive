@@ -699,6 +699,7 @@ button {
 .appbar__center .searchbox {
   width: auto;
   max-width: 520px;
+  margin: 0;
 }
 .cdd-cmd-wrap { position: relative; display: flex; align-items: center; justify-content: flex-end; }
 .cdd-cmd-wrap .autocomplete { left: auto; right: 0; transform: none; width: min(360px, calc(100vw - 32px)); }
