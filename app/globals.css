@@ -693,15 +693,15 @@ button {
 .appbar__center {
   flex: 1;
   display: flex;
-  justify-content: center;
+  justify-content: flex-end;
   min-width: 0;
 }
 .appbar__center .searchbox {
-  width: 100%;
+  width: auto;
   max-width: 520px;
 }
-.cdd-cmd-wrap { position: relative; display: flex; align-items: center; justify-content: center; }
-.cdd-cmd-wrap .autocomplete { left: 50%; right: auto; transform: translateX(-50%); width: min(360px, calc(100vw - 32px)); }
+.cdd-cmd-wrap { position: relative; display: flex; align-items: center; justify-content: flex-end; }
+.cdd-cmd-wrap .autocomplete { left: auto; right: 0; transform: none; width: min(360px, calc(100vw - 32px)); }
 .cdd-cmd-pill {
   position: relative; height: 38px; border-radius: 20px; overflow: hidden;
   background: var(--cb-bg); color: var(--cb-text);
