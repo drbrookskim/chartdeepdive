@@ -23,6 +23,7 @@ import {
 } from "@/lib/api";
 import { useRecent } from "@/lib/recent";
 import { formatPrice, formatSigned } from "@/lib/format";
+import { readSuiteContextFromParams, buildSignnithFeedbackUrl } from "@/lib/suiteBridge";
 
 // lightweight-charts touches the DOM/window; load the chart client-side only.
 const ChartStack = dynamic(() => import("@/components/ChartStack"), {
@@ -119,6 +120,7 @@ function ChartInner() {
   const market = (params.get("market") as Market) ?? "US";
   const nameParam = params.get("name") ?? "";
   const exchange = params.get("exchange") ?? "";
+  const suiteCtx = useMemo(() => readSuiteContextFromParams(params), [params]);
 
   const [ohlcv, setOhlcv] = useState<OhlcvResponse | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
@@ -439,6 +441,69 @@ function ChartInner() {
           </>
         )}
       </div>
+
+      {(suiteCtx.from === "signnith" || suiteCtx.signal) && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "12px",
+            flexWrap: "wrap",
+            padding: "8px 16px",
+            margin: "0 16px 10px",
+            borderRadius: "10px",
+            border: "1px solid rgba(255,138,0,0.35)",
+            background: "rgba(255,138,0,0.08)",
+            fontSize: "0.82rem",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+            {suiteCtx.signal ? (
+              <>
+                <strong>Signnith 기준 신호</strong>
+                <span>{suiteCtx.signal.action || "HOLD"}</span>
+                <span>
+                  · 신뢰도{" "}
+                  {suiteCtx.signal.confidence != null
+                    ? `${Math.round(suiteCtx.signal.confidence * 100)}%`
+                    : "-"}
+                </span>
+                <span>
+                  · 점수{" "}
+                  {suiteCtx.signal.combined != null ? suiteCtx.signal.combined.toFixed(2) : "-"}
+                </span>
+              </>
+            ) : (
+              <strong>Signnith에서 전달된 종목 컨텍스트</strong>
+            )}
+          </div>
+          <button
+            type="button"
+            className="signalbtn"
+            style={{ borderColor: "rgba(255,138,0,0.45)" }}
+            onClick={() => {
+              const fbScore =
+                overallSignal === 1 ? 0.6 : overallSignal === -1 ? -0.6 : 0;
+              const pat = topPattern ? `${topPattern.type}(${Math.round(topPattern.confidence * 100)}%)` : "none";
+              const curTheme =
+                typeof document !== "undefined"
+                  ? document.documentElement.getAttribute("data-theme") || suiteCtx.theme || "dark"
+                  : "dark";
+              const url = buildSignnithFeedbackUrl({
+                ticker: symbol,
+                theme: curTheme,
+                signalId: suiteCtx.signal?.signalId,
+                feedbackScore: fbScore,
+                feedbackSummary: `signal=${overallSignal},top_pattern=${pat}`,
+              });
+              window.open(url, "_blank");
+            }}
+          >
+            Signnith로 되먹임 전송
+          </button>
+        </div>
+      )}
 
       {/* main body */}
       {loading && !ohlcv ? (
