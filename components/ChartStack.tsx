@@ -182,10 +182,11 @@ const cssVar = (name: string) =>
   getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
 /** MA preset -> fixed line color (matches the legend) — literal hex, not
- * theme tokens, per explicit request (5=black, 10=dark blue, 20=orange,
- * 60=green, 120=dark gray, same in both themes). */
+ * theme tokens, per explicit request (5=gray so it remains visible in dark
+ * mode, 10=dark blue, 20=orange, 60=green, 120=dark gray, same in both
+ * themes). */
 const MA_COLORS: Record<number, string> = {
-  5: "#000000",
+  5: "#757575",
   10: "#4d79c7",
   20: "#ffa733",
   60: "#4caf5a",
@@ -538,8 +539,12 @@ export default function ChartStack({
   // real symbol change (see the effect below) so a *new* stock still starts
   // at the default view rather than inheriting the old one's scroll position.
   const preservedRangeRef = useRef<{ from: number; to: number } | null>(null);
+  /** Pattern keys checked as of the last render — diffed to spot the one the
+   * user just checked (the only one worth panning to). */
+  const prevSelectedKeysRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     preservedRangeRef.current = null;
+    prevSelectedKeysRef.current = new Set();
   }, [symbol, market]);
 
   // Make room for the 가상 예측 bars the moment forecast mode is entered — by
@@ -1504,6 +1509,37 @@ export default function ChartStack({
       forecastSeriesRef.current = forecastSeries;
     }
 
+    // Renders the single candle the user is drawing/editing. Real up/down
+    // fill so the 양봉/음봉 choice is obvious at a glance, neon border/wick
+    // to mark it as a draft rather than a committed candle.
+    const drawForecastDraft = (draft: Candle) => {
+      if (!forecastDraftSeriesRef.current) {
+        forecastDraftSeriesRef.current = main.addCandlestickSeries({
+          upColor: up,
+          downColor: down,
+          borderUpColor: NEON,
+          borderDownColor: NEON,
+          wickUpColor: NEON,
+          wickDownColor: NEON,
+          priceLineVisible: false,
+          lastValueVisible: false,
+        });
+      }
+      forecastDraftSeriesRef.current.setData([
+        {
+          time: toChartTime(draft.date, isIntraday),
+          open: draft.open,
+          high: draft.high,
+          low: draft.low,
+          close: draft.close,
+        },
+      ]);
+    };
+    // A draft surviving a rebuild (layer toggled mid-draw, or 예측 수정
+    // re-opening a committed candle) has to be re-rendered here: its old
+    // series died with the previous chart instance.
+    if (forecastDraftCandleRef.current) drawForecastDraft(forecastDraftCandleRef.current);
+
     // Re-apply user-drawn horizontal lines to the freshly-created series —
     // this effect recreates candleSeries on every rebuild (any layer toggle,
     // not just a symbol change), so the old IPriceLine handles are already
@@ -2400,30 +2436,7 @@ export default function ChartStack({
         };
       }
       forecastDraftCandleRef.current = draft;
-      if (!forecastDraftSeriesRef.current && mainApiRef.current) {
-        // Real up/down fill so the 양봉/음봉 choice is obvious at a glance,
-        // neon border/wick to mark it as the still-being-drawn draft rather
-        // than a committed candle.
-        forecastDraftSeriesRef.current = mainApiRef.current.addCandlestickSeries({
-          upColor: up,
-          downColor: down,
-          borderUpColor: NEON,
-          borderDownColor: NEON,
-          wickUpColor: NEON,
-          wickDownColor: NEON,
-          priceLineVisible: false,
-          lastValueVisible: false,
-        });
-      }
-      forecastDraftSeriesRef.current?.setData([
-        {
-          time: toChartTime(draft.date, isIntraday),
-          open: draft.open,
-          high: draft.high,
-          low: draft.low,
-          close: draft.close,
-        },
-      ]);
+      drawForecastDraft(draft);
     };
 
     const onDrawMouseDown = (e: PointerEvent) => {
@@ -2758,12 +2771,51 @@ export default function ChartStack({
   // state).
   useEffect(() => {
     drawPatternShapes(selectedPatterns);
-  }, [selectedPatterns, drawPatternShapes]);
 
-  // Checking a pattern deliberately does NOT move the view: the user asked
-  // for their current pan/zoom to survive a pattern toggle, so the pattern's
-  // markers/shape-lines just get drawn wherever they fall (possibly offscreen
-  // if the user is looking elsewhere).
+    // Checking a pattern only moves the view when it has to: if any part of
+    // the pattern is already on screen the user's pan/zoom is left exactly
+    // as-is, and only a fully off-screen pattern gets panned to (keeping the
+    // current zoom level — bar count — and just shifting the window).
+    const prevKeys = prevSelectedKeysRef.current;
+    const added = selectedPatterns.find((p) => !prevKeys.has(p.key));
+    prevSelectedKeysRef.current = new Set(selectedPatterns.map((p) => p.key));
+    if (!added) return;
+    const main = mainApiRef.current;
+    const view = main?.timeScale().getVisibleLogicalRange();
+    if (!main || !view) return;
+
+    // Logical indices are positions in whatever series is currently plotted,
+    // which is the intraday/extended-history array when either is active —
+    // not the raw `candles` prop.
+    const bars = zoomCandles ?? historyCandles ?? candles;
+    let startIdx = bars.findIndex((c) => c.date >= added.p.range.start);
+    if (startIdx === -1) startIdx = bars.length - 1;
+    let endIdx = -1;
+    for (let i = bars.length - 1; i >= 0; i--) {
+      if (bars[i].date <= added.p.range.end) {
+        endIdx = i;
+        break;
+      }
+    }
+    if (endIdx === -1) endIdx = startIdx;
+    if (endIdx < startIdx) [startIdx, endIdx] = [endIdx, startIdx];
+    if (endIdx >= view.from && startIdx <= view.to) return; // overlaps the view — leave it alone
+
+    const width = view.to - view.from;
+    const center = (startIdx + endIdx) / 2;
+    let from = center - width / 2;
+    let to = from + width;
+    const last = bars.length - 1;
+    if (to > last) {
+      from -= to - last;
+      to = last;
+    }
+    if (from < 0) {
+      to -= from;
+      from = 0;
+    }
+    main.timeScale().setVisibleLogicalRange({ from, to });
+  }, [selectedPatterns, drawPatternShapes, candles, historyCandles, zoomCandles]);
 
   // Closes the shared detail popup on any click outside it — annotation
   // clicks themselves stopPropagation (see openDetailPopup's callers) so
@@ -2871,6 +2923,20 @@ export default function ChartStack({
     setDrawMode(null);
   }
 
+  // Re-opens a committed 가상 예측 for editing: the anchor candle goes back
+  // to being the draft (so 몸통/꼬리 can be dragged again) and the
+  // auto-continued days are dropped until 완료 recomputes them.
+  function editForecast() {
+    const anchor = forecastResult?.anchor;
+    if (!anchor) return;
+    forecastDraftCandleRef.current = anchor;
+    setForecastHasDraft(true);
+    setForecastDir(anchor.close >= anchor.open ? "up" : "down");
+    setForecastPart("body");
+    setForecastResult(null);
+    setDrawMode("forecast");
+  }
+
   // Picking 양봉/음봉 also flips whatever is already drawn (swap open/close,
   // keeping the same body range and wicks) — otherwise the toggle would look
   // dead until the user redrew the candle from scratch.
@@ -2928,18 +2994,23 @@ export default function ChartStack({
             전체 지우기
           </button>
           <button
-            className={drawMode === "forecast" || forecastResult ? "on" : ""}
+            className={drawMode === "forecast" ? "on" : ""}
             onClick={() => {
               if (forecastResult) {
-                setForecastResult(null);
+                editForecast();
                 return;
               }
               setDrawMode((m) => (m === "forecast" ? null : "forecast"));
             }}
             title="예측 캔들을 직접 그리고, 나머지는 규칙 기반으로 이어그리는 가상 시나리오 — 실제 예측 아님"
           >
-            {forecastResult ? "가상 예측 지우기" : "가상 예측(5일)"}
+            {forecastResult ? "예측 캔들 수정" : "가상 예측(5일)"}
           </button>
+          {forecastResult && (
+            <button onClick={() => setForecastResult(null)} title="가상 예측 시나리오를 지움">
+              가상 예측 지우기
+            </button>
+          )}
           {drawMode === "forecast" && (
             <>
               <button

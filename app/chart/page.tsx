@@ -451,7 +451,7 @@ function ChartInner() {
             gap: "12px",
             flexWrap: "wrap",
             padding: "8px 16px",
-            margin: "0 16px 10px",
+            margin: "18px 18px 0",
             borderRadius: "10px",
             border: "1px solid rgba(255,138,0,0.35)",
             background: "rgba(255,138,0,0.08)",
